@@ -1,0 +1,1 @@
+/Users/liam/rvfm2/sdk/rust/rvfm/target/riscv32i-unknown-none-elf/release/librvfm.rlib: /Users/liam/rvfm2/sdk/rust/rvfm/src/debug.rs /Users/liam/rvfm2/sdk/rust/rvfm/src/gpu/mod.rs /Users/liam/rvfm2/sdk/rust/rvfm/src/hart.rs /Users/liam/rvfm2/sdk/rust/rvfm/src/interrupt.rs /Users/liam/rvfm2/sdk/rust/rvfm/src/intrin.rs /Users/liam/rvfm2/sdk/rust/rvfm/src/lib.rs

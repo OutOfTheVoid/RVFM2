@@ -1,0 +1,20 @@
+[package]
+name = "rvfm"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+parking_lot = "0.12.1"
+wgpu = "0.14.2"
+winit = "0.27.5"
+bytemuck = "1.12.3"
+static_init = "1.0.3"
+gdbstub = "0.6"
+gdbstub_arch = "0.2.4"
+elf-utilities = "0.2.20"
+pixels = "0.13.0"
+noline = { version = "0.2.0", features = ["std"] }
+termion = "*"
+cpal = "0.15"
