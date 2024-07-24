@@ -27,9 +27,17 @@ fn main() {
     let debug = args.iter().any(|x| x.contains("-d"));
     let config = Config::default();
     
+    if args.len() == 1 {
+        println!("usage: rvfm2 [-d] <rom>");
+        return;
+    }
+
+    let rom_path = args[args.len() - 1].clone();
+    let rom: Vec<u8> = std::fs::read(rom_path.clone()).expect(&format!("Failed to read rom file: {}", rom_path));
+    
     ui::main_window::MainWindow::run(&config, move |main_window| {
-        let rom_bytes = include_bytes!("../test_binaries/rust/bin/main.bin"); 
-        let (machine, machine_main_thread) = Machine::new(&rom_bytes[..], main_window.clone());
+        let (machine, machine_main_thread) = Machine::new(&rom[..], main_window.clone());
+        drop(rom);
         if debug {
             run_debugger(machine.clone(), None);
         } else {

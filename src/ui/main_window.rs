@@ -35,7 +35,7 @@ pub struct MainWindow {
 }
 
 impl MainWindow {
-    pub fn run<F: FnMut(Self) + Send + 'static>(config: &Config, mut application_thread: F) -> ! {
+    pub fn run<F: FnOnce(Self) + Send + 'static>(config: &Config, mut application_thread: F) -> ! {
         let event_loop = EventLoopBuilder::<WindowMessage>::with_user_event()
             .build();
         let event_proxy = event_loop.create_proxy();

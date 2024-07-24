@@ -1,4 +1,4 @@
-pushd test_binaries/c
+pushd tests/c
 echo "===================================="
 echo "making test/binaries/c"
 echo "===================================="
@@ -6,7 +6,7 @@ make clean
 make
 popd
 
-pushd test_binaries/basic_gpu
+pushd tests/basic_gpu
 echo "===================================="
 echo "making test/binaries/basic_gpu"
 echo "===================================="
@@ -14,7 +14,7 @@ make clean
 make
 popd
 
-pushd test_binaries/interrupts
+pushd tests/interrupts
 echo "===================================="
 echo "making test/binaries/interrupts"
 echo "===================================="
@@ -22,7 +22,7 @@ make clean
 make
 popd
 
-pushd test_binaries/texture_upload
+pushd tests/texture_upload
 echo "===================================="
 echo "making test/binaries/texture_upload"
 echo "===================================="
@@ -30,7 +30,7 @@ make clean
 make
 popd
 
-pushd test_binaries/multi_hart
+pushd tests/multi_hart
 echo "===================================="
 echo "making test/binaries/multi_hart"
 echo "===================================="
@@ -38,7 +38,7 @@ make clean
 make
 popd
 
-pushd test_binaries/direct_blit
+pushd tests/direct_blit
 echo "===================================="
 echo "making test/binaries/direct_blit"
 echo "===================================="
@@ -46,7 +46,7 @@ make clean
 make
 popd
 
-pushd test_binaries/cutout_blit
+pushd tests/cutout_blit
 echo "===================================="
 echo "making test/binaries/cutout_blit"
 echo "===================================="
@@ -54,7 +54,7 @@ make clean
 make
 popd
 
-pushd test_binaries/basic_spu
+pushd tests/basic_spu
 echo "===================================="
 echo "making test/binaries/basic_spu"
 echo "===================================="
@@ -62,7 +62,7 @@ make clean
 make
 popd
 
-pushd test_binaries/rust
+pushd tests/rust
 echo "===================================="
 echo "making test/binaries/rust"
 echo "===================================="

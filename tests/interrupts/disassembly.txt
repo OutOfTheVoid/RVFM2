@@ -1,0 +1,458 @@
+
+bin/interrupts.bin.elf:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+f8000000 <_start>:
+f8000000:	08001197          	auipc	gp,0x8001
+f8000004:	80018193          	add	gp,gp,-2048 # 800 <__global_pointer>
+f8000008:	10000117          	auipc	sp,0x10000
+f800000c:	ff810113          	add	sp,sp,-8 # 8000000 <__stack_ptr>
+f8000010:	2f4000ef          	jal	f8000304 <main>
+f8000014:	10500073          	wfi
+
+f8000018 <debug_write_message>:
+f8000018:	fe010113          	add	sp,sp,-32
+f800001c:	00812e23          	sw	s0,28(sp)
+f8000020:	02010413          	add	s0,sp,32
+f8000024:	fea42623          	sw	a0,-20(s0)
+f8000028:	feb42423          	sw	a1,-24(s0)
+f800002c:	800007b7          	lui	a5,0x80000
+f8000030:	fec42703          	lw	a4,-20(s0)
+f8000034:	00e7a023          	sw	a4,0(a5) # 80000000 <__stack_ptr+0x78000000>
+f8000038:	800007b7          	lui	a5,0x80000
+f800003c:	00478793          	add	a5,a5,4 # 80000004 <__stack_ptr+0x78000004>
+f8000040:	fe842703          	lw	a4,-24(s0)
+f8000044:	00e7a023          	sw	a4,0(a5)
+f8000048:	800007b7          	lui	a5,0x80000
+f800004c:	00c78793          	add	a5,a5,12 # 8000000c <__stack_ptr+0x7800000c>
+f8000050:	00100713          	li	a4,1
+f8000054:	00e7a023          	sw	a4,0(a5)
+f8000058:	800007b7          	lui	a5,0x80000
+f800005c:	00878793          	add	a5,a5,8 # 80000008 <__stack_ptr+0x78000008>
+f8000060:	0007a783          	lw	a5,0(a5)
+f8000064:	00078513          	mv	a0,a5
+f8000068:	01c12403          	lw	s0,28(sp)
+f800006c:	02010113          	add	sp,sp,32
+f8000070:	00008067          	ret
+
+f8000074 <debug_write_string>:
+f8000074:	fd010113          	add	sp,sp,-48
+f8000078:	02112623          	sw	ra,44(sp)
+f800007c:	02812423          	sw	s0,40(sp)
+f8000080:	03010413          	add	s0,sp,48
+f8000084:	fca42e23          	sw	a0,-36(s0)
+f8000088:	fdc42503          	lw	a0,-36(s0)
+f800008c:	3a4000ef          	jal	f8000430 <strlen>
+f8000090:	fea42623          	sw	a0,-20(s0)
+f8000094:	fec42583          	lw	a1,-20(s0)
+f8000098:	fdc42503          	lw	a0,-36(s0)
+f800009c:	f7dff0ef          	jal	f8000018 <debug_write_message>
+f80000a0:	00050793          	mv	a5,a0
+f80000a4:	00078513          	mv	a0,a5
+f80000a8:	02c12083          	lw	ra,44(sp)
+f80000ac:	02812403          	lw	s0,40(sp)
+f80000b0:	03010113          	add	sp,sp,48
+f80000b4:	00008067          	ret
+
+f80000b8 <debug_flush>:
+f80000b8:	ff010113          	add	sp,sp,-16
+f80000bc:	00812623          	sw	s0,12(sp)
+f80000c0:	01010413          	add	s0,sp,16
+f80000c4:	800007b7          	lui	a5,0x80000
+f80000c8:	01078793          	add	a5,a5,16 # 80000010 <__stack_ptr+0x78000010>
+f80000cc:	00100713          	li	a4,1
+f80000d0:	00e7a023          	sw	a4,0(a5)
+f80000d4:	800007b7          	lui	a5,0x80000
+f80000d8:	00878793          	add	a5,a5,8 # 80000008 <__stack_ptr+0x78000008>
+f80000dc:	0007a783          	lw	a5,0(a5)
+f80000e0:	00078513          	mv	a0,a5
+f80000e4:	00c12403          	lw	s0,12(sp)
+f80000e8:	01010113          	add	sp,sp,16
+f80000ec:	00008067          	ret
+
+f80000f0 <debug_print>:
+f80000f0:	fe010113          	add	sp,sp,-32
+f80000f4:	00112e23          	sw	ra,28(sp)
+f80000f8:	00812c23          	sw	s0,24(sp)
+f80000fc:	02010413          	add	s0,sp,32
+f8000100:	fea42623          	sw	a0,-20(s0)
+f8000104:	fec42503          	lw	a0,-20(s0)
+f8000108:	f6dff0ef          	jal	f8000074 <debug_write_string>
+f800010c:	fadff0ef          	jal	f80000b8 <debug_flush>
+f8000110:	00000013          	nop
+f8000114:	00078513          	mv	a0,a5
+f8000118:	01c12083          	lw	ra,28(sp)
+f800011c:	01812403          	lw	s0,24(sp)
+f8000120:	02010113          	add	sp,sp,32
+f8000124:	00008067          	ret
+
+f8000128 <wfi>:
+f8000128:	ff010113          	add	sp,sp,-16
+f800012c:	00812623          	sw	s0,12(sp)
+f8000130:	01010413          	add	s0,sp,16
+f8000134:	10500073          	wfi
+f8000138:	00000013          	nop
+f800013c:	00c12403          	lw	s0,12(sp)
+f8000140:	01010113          	add	sp,sp,16
+f8000144:	00008067          	ret
+
+f8000148 <hart_id>:
+f8000148:	fe010113          	add	sp,sp,-32
+f800014c:	00812e23          	sw	s0,28(sp)
+f8000150:	02010413          	add	s0,sp,32
+f8000154:	fe042623          	sw	zero,-20(s0)
+f8000158:	f14027f3          	csrr	a5,mhartid
+f800015c:	fef42623          	sw	a5,-20(s0)
+f8000160:	fec42783          	lw	a5,-20(s0)
+f8000164:	00078513          	mv	a0,a5
+f8000168:	01c12403          	lw	s0,28(sp)
+f800016c:	02010113          	add	sp,sp,32
+f8000170:	00008067          	ret
+
+f8000174 <hart_enable_interrupts>:
+f8000174:	ff010113          	add	sp,sp,-16
+f8000178:	00812623          	sw	s0,12(sp)
+f800017c:	01010413          	add	s0,sp,16
+f8000180:	30046073          	csrs	mstatus,8
+f8000184:	00000013          	nop
+f8000188:	00c12403          	lw	s0,12(sp)
+f800018c:	01010113          	add	sp,sp,16
+f8000190:	00008067          	ret
+
+f8000194 <hart_set_vectored_interrupt_table>:
+f8000194:	fd010113          	add	sp,sp,-48
+f8000198:	02812623          	sw	s0,44(sp)
+f800019c:	03010413          	add	s0,sp,48
+f80001a0:	fca42e23          	sw	a0,-36(s0)
+f80001a4:	fdc42783          	lw	a5,-36(s0)
+f80001a8:	0017e793          	or	a5,a5,1
+f80001ac:	fef42623          	sw	a5,-20(s0)
+f80001b0:	30579073          	csrw	mtvec,a5
+f80001b4:	fef42623          	sw	a5,-20(s0)
+f80001b8:	00000013          	nop
+f80001bc:	02c12403          	lw	s0,44(sp)
+f80001c0:	03010113          	add	sp,sp,48
+f80001c4:	00008067          	ret
+
+f80001c8 <hart_enable_software_interrupt>:
+f80001c8:	fe010113          	add	sp,sp,-32
+f80001cc:	00812e23          	sw	s0,28(sp)
+f80001d0:	02010413          	add	s0,sp,32
+f80001d4:	00800793          	li	a5,8
+f80001d8:	fef42623          	sw	a5,-20(s0)
+f80001dc:	3047a073          	csrs	mie,a5
+f80001e0:	fef42623          	sw	a5,-20(s0)
+f80001e4:	00000013          	nop
+f80001e8:	01c12403          	lw	s0,28(sp)
+f80001ec:	02010113          	add	sp,sp,32
+f80001f0:	00008067          	ret
+
+f80001f4 <this_hart>:
+f80001f4:	ff010113          	add	sp,sp,-16
+f80001f8:	00112623          	sw	ra,12(sp)
+f80001fc:	00812423          	sw	s0,8(sp)
+f8000200:	01010413          	add	s0,sp,16
+f8000204:	f45ff0ef          	jal	f8000148 <hart_id>
+f8000208:	00050793          	mv	a5,a0
+f800020c:	00078513          	mv	a0,a5
+f8000210:	00c12083          	lw	ra,12(sp)
+f8000214:	00812403          	lw	s0,8(sp)
+f8000218:	01010113          	add	sp,sp,16
+f800021c:	00008067          	ret
+
+f8000220 <enable_ihi>:
+f8000220:	fe010113          	add	sp,sp,-32
+f8000224:	00812e23          	sw	s0,28(sp)
+f8000228:	02010413          	add	s0,sp,32
+f800022c:	fea42623          	sw	a0,-20(s0)
+f8000230:	800317b7          	lui	a5,0x80031
+f8000234:	fd078713          	add	a4,a5,-48 # 80030fd0 <__stack_ptr+0x78030fd0>
+f8000238:	fec42783          	lw	a5,-20(s0)
+f800023c:	00279793          	sll	a5,a5,0x2
+f8000240:	00f707b3          	add	a5,a4,a5
+f8000244:	00100713          	li	a4,1
+f8000248:	00e7a023          	sw	a4,0(a5)
+f800024c:	00000013          	nop
+f8000250:	01c12403          	lw	s0,28(sp)
+f8000254:	02010113          	add	sp,sp,32
+f8000258:	00008067          	ret
+
+f800025c <send_ihi>:
+f800025c:	fe010113          	add	sp,sp,-32
+f8000260:	00812e23          	sw	s0,28(sp)
+f8000264:	02010413          	add	s0,sp,32
+f8000268:	fea42623          	sw	a0,-20(s0)
+f800026c:	800317b7          	lui	a5,0x80031
+f8000270:	ff078713          	add	a4,a5,-16 # 80030ff0 <__stack_ptr+0x78030ff0>
+f8000274:	fec42783          	lw	a5,-20(s0)
+f8000278:	00279793          	sll	a5,a5,0x2
+f800027c:	00f707b3          	add	a5,a4,a5
+f8000280:	00100713          	li	a4,1
+f8000284:	00e7a023          	sw	a4,0(a5)
+f8000288:	00000013          	nop
+f800028c:	01c12403          	lw	s0,28(sp)
+f8000290:	02010113          	add	sp,sp,32
+f8000294:	00008067          	ret
+
+f8000298 <clear_ihi>:
+f8000298:	fe010113          	add	sp,sp,-32
+f800029c:	00812e23          	sw	s0,28(sp)
+f80002a0:	02010413          	add	s0,sp,32
+f80002a4:	fea42623          	sw	a0,-20(s0)
+f80002a8:	800317b7          	lui	a5,0x80031
+f80002ac:	fe078713          	add	a4,a5,-32 # 80030fe0 <__stack_ptr+0x78030fe0>
+f80002b0:	fec42783          	lw	a5,-20(s0)
+f80002b4:	00279793          	sll	a5,a5,0x2
+f80002b8:	00f707b3          	add	a5,a4,a5
+f80002bc:	00100713          	li	a4,1
+f80002c0:	00e7a023          	sw	a4,0(a5)
+f80002c4:	00000013          	nop
+f80002c8:	01c12403          	lw	s0,28(sp)
+f80002cc:	02010113          	add	sp,sp,32
+f80002d0:	00008067          	ret
+
+f80002d4 <interrupt_table>:
+f80002d4:	30200073          	mret
+f80002d8:	30200073          	mret
+f80002dc:	30200073          	mret
+f80002e0:	09c0006f          	j	f800037c <software_interrupt>
+f80002e4:	30200073          	mret
+f80002e8:	30200073          	mret
+f80002ec:	30200073          	mret
+f80002f0:	0700006f          	j	f8000360 <dummy_interrupt>
+f80002f4:	30200073          	mret
+f80002f8:	30200073          	mret
+f80002fc:	30200073          	mret
+f8000300:	0600006f          	j	f8000360 <dummy_interrupt>
+
+f8000304 <main>:
+f8000304:	ff010113          	add	sp,sp,-16
+f8000308:	00112623          	sw	ra,12(sp)
+f800030c:	00812423          	sw	s0,8(sp)
+f8000310:	01010413          	add	s0,sp,16
+f8000314:	ee1ff0ef          	jal	f80001f4 <this_hart>
+f8000318:	00050713          	mv	a4,a0
+f800031c:	00e02023          	sw	a4,0(zero) # 0 <self>
+f8000320:	f80007b7          	lui	a5,0xf8000
+f8000324:	2d478513          	add	a0,a5,724 # f80002d4 <interrupt_table>
+f8000328:	e6dff0ef          	jal	f8000194 <hart_set_vectored_interrupt_table>
+f800032c:	00002783          	lw	a5,0(zero) # 0 <self>
+f8000330:	00078513          	mv	a0,a5
+f8000334:	eedff0ef          	jal	f8000220 <enable_ihi>
+f8000338:	e91ff0ef          	jal	f80001c8 <hart_enable_software_interrupt>
+f800033c:	e39ff0ef          	jal	f8000174 <hart_enable_interrupts>
+f8000340:	00002783          	lw	a5,0(zero) # 0 <self>
+f8000344:	00078513          	mv	a0,a5
+f8000348:	f15ff0ef          	jal	f800025c <send_ihi>
+f800034c:	f80007b7          	lui	a5,0xf8000
+f8000350:	47c78513          	add	a0,a5,1148 # f800047c <strlen+0x4c>
+f8000354:	d9dff0ef          	jal	f80000f0 <debug_print>
+f8000358:	dd1ff0ef          	jal	f8000128 <wfi>
+f800035c:	ffdff06f          	j	f8000358 <main+0x54>
+
+f8000360 <dummy_interrupt>:
+f8000360:	ff010113          	add	sp,sp,-16
+f8000364:	00812623          	sw	s0,12(sp)
+f8000368:	01010413          	add	s0,sp,16
+f800036c:	00000013          	nop
+f8000370:	00c12403          	lw	s0,12(sp)
+f8000374:	01010113          	add	sp,sp,16
+f8000378:	30200073          	mret
+
+f800037c <software_interrupt>:
+f800037c:	fb010113          	add	sp,sp,-80
+f8000380:	04112623          	sw	ra,76(sp)
+f8000384:	04512423          	sw	t0,72(sp)
+f8000388:	04612223          	sw	t1,68(sp)
+f800038c:	04712023          	sw	t2,64(sp)
+f8000390:	02812e23          	sw	s0,60(sp)
+f8000394:	02a12c23          	sw	a0,56(sp)
+f8000398:	02b12a23          	sw	a1,52(sp)
+f800039c:	02c12823          	sw	a2,48(sp)
+f80003a0:	02d12623          	sw	a3,44(sp)
+f80003a4:	02e12423          	sw	a4,40(sp)
+f80003a8:	02f12223          	sw	a5,36(sp)
+f80003ac:	03012023          	sw	a6,32(sp)
+f80003b0:	01112e23          	sw	a7,28(sp)
+f80003b4:	01c12c23          	sw	t3,24(sp)
+f80003b8:	01d12a23          	sw	t4,20(sp)
+f80003bc:	01e12823          	sw	t5,16(sp)
+f80003c0:	01f12623          	sw	t6,12(sp)
+f80003c4:	05010413          	add	s0,sp,80
+f80003c8:	f80007b7          	lui	a5,0xf8000
+f80003cc:	49878513          	add	a0,a5,1176 # f8000498 <strlen+0x68>
+f80003d0:	d21ff0ef          	jal	f80000f0 <debug_print>
+f80003d4:	00002783          	lw	a5,0(zero) # 0 <self>
+f80003d8:	00078513          	mv	a0,a5
+f80003dc:	ebdff0ef          	jal	f8000298 <clear_ihi>
+f80003e0:	00000013          	nop
+f80003e4:	04c12083          	lw	ra,76(sp)
+f80003e8:	04812283          	lw	t0,72(sp)
+f80003ec:	04412303          	lw	t1,68(sp)
+f80003f0:	04012383          	lw	t2,64(sp)
+f80003f4:	03c12403          	lw	s0,60(sp)
+f80003f8:	03812503          	lw	a0,56(sp)
+f80003fc:	03412583          	lw	a1,52(sp)
+f8000400:	03012603          	lw	a2,48(sp)
+f8000404:	02c12683          	lw	a3,44(sp)
+f8000408:	02812703          	lw	a4,40(sp)
+f800040c:	02412783          	lw	a5,36(sp)
+f8000410:	02012803          	lw	a6,32(sp)
+f8000414:	01c12883          	lw	a7,28(sp)
+f8000418:	01812e03          	lw	t3,24(sp)
+f800041c:	01412e83          	lw	t4,20(sp)
+f8000420:	01012f03          	lw	t5,16(sp)
+f8000424:	00c12f83          	lw	t6,12(sp)
+f8000428:	05010113          	add	sp,sp,80
+f800042c:	30200073          	mret
+
+f8000430 <strlen>:
+f8000430:	fd010113          	add	sp,sp,-48
+f8000434:	02812623          	sw	s0,44(sp)
+f8000438:	03010413          	add	s0,sp,48
+f800043c:	fca42e23          	sw	a0,-36(s0)
+f8000440:	fe042623          	sw	zero,-20(s0)
+f8000444:	0100006f          	j	f8000454 <strlen+0x24>
+f8000448:	fec42783          	lw	a5,-20(s0)
+f800044c:	00178793          	add	a5,a5,1
+f8000450:	fef42623          	sw	a5,-20(s0)
+f8000454:	fdc42703          	lw	a4,-36(s0)
+f8000458:	fec42783          	lw	a5,-20(s0)
+f800045c:	00f707b3          	add	a5,a4,a5
+f8000460:	0007c783          	lbu	a5,0(a5)
+f8000464:	fe0792e3          	bnez	a5,f8000448 <strlen+0x18>
+f8000468:	fec42783          	lw	a5,-20(s0)
+f800046c:	00078513          	mv	a0,a5
+f8000470:	02c12403          	lw	s0,44(sp)
+f8000474:	03010113          	add	sp,sp,48
+f8000478:	00008067          	ret
+f800047c:	6661                	.2byte	0x6661
+f800047e:	6574                	.2byte	0x6574
+f8000480:	2072                	.2byte	0x2072
+f8000482:	74666f73          	csrrs	t5,0x746,12
+f8000486:	65726177          	.4byte	0x65726177
+f800048a:	6920                	.2byte	0x6920
+f800048c:	746e                	.2byte	0x746e
+f800048e:	7265                	.2byte	0x7265
+f8000490:	7572                	.2byte	0x7572
+f8000492:	7470                	.2byte	0x7470
+f8000494:	0000                	.2byte	0x0
+f8000496:	0000                	.2byte	0x0
+f8000498:	74666f73          	csrrs	t5,0x746,12
+f800049c:	65726177          	.4byte	0x65726177
+f80004a0:	6920                	.2byte	0x6920
+f80004a2:	746e                	.2byte	0x746e
+f80004a4:	7265                	.2byte	0x7265
+f80004a6:	7572                	.2byte	0x7572
+f80004a8:	7470                	.2byte	0x7470
+	...
+
+f80004ac <debug_message_ptr>:
+f80004ac:	0000                	.2byte	0x0
+f80004ae:	8000                	.2byte	0x8000
+
+f80004b0 <debug_length>:
+f80004b0:	0004                	.2byte	0x4
+f80004b2:	8000                	.2byte	0x8000
+
+f80004b4 <debug_status>:
+f80004b4:	0008                	.2byte	0x8
+f80004b6:	8000                	.2byte	0x8000
+
+f80004b8 <debug_print_trigger>:
+f80004b8:	000c                	.2byte	0xc
+f80004ba:	8000                	.2byte	0x8000
+
+f80004bc <debug_flush_trigger>:
+f80004bc:	0010                	.2byte	0x10
+f80004be:	8000                	.2byte	0x8000
+
+f80004c0 <pending_interrupts>:
+f80004c0:	0fc0                	.2byte	0xfc0
+f80004c2:	          	lb	zero,253(ra)
+
+f80004c4 <ihi_enables>:
+f80004c4:	0fd0                	.2byte	0xfd0
+f80004c6:	          	lb	zero,254(ra)
+
+f80004c8 <ihi_clears>:
+f80004c8:	0fe0                	.2byte	0xfe0
+f80004ca:	          	lb	zero,255(ra)
+
+f80004cc <ihi_triggers>:
+f80004cc:	0ff0                	.2byte	0xff0
+f80004ce:	03 80             	Address 0xf80004ce is out of bounds.
+
+
+Disassembly of section .eh_frame:
+
+f80004d0 <__stack_ptr+0xf00004d0>:
+f80004d0:	0014                	.2byte	0x14
+f80004d2:	0000                	.2byte	0x0
+f80004d4:	0000                	.2byte	0x0
+f80004d6:	0000                	.2byte	0x0
+f80004d8:	00527a03          	.4byte	0x527a03
+f80004dc:	7c01                	.2byte	0x7c01
+f80004de:	0101                	.2byte	0x101
+f80004e0:	07020d1b          	.4byte	0x7020d1b
+f80004e4:	0001                	.2byte	0x1
+f80004e6:	0000                	.2byte	0x0
+f80004e8:	0010                	.2byte	0x10
+f80004ea:	0000                	.2byte	0x0
+f80004ec:	001c                	.2byte	0x1c
+f80004ee:	0000                	.2byte	0x0
+f80004f0:	fb10                	.2byte	0xfb10
+f80004f2:	ffff                	.2byte	0xffff
+f80004f4:	0018                	.2byte	0x18
+f80004f6:	0000                	.2byte	0x0
+f80004f8:	0000                	.2byte	0x0
+	...
+
+Disassembly of section .sbss:
+
+00000000 <self>:
+   0:	0000                	.2byte	0x0
+	...
+
+Disassembly of section .riscv.attributes:
+
+00000000 <.riscv.attributes>:
+   0:	3641                	.2byte	0x3641
+   2:	0000                	.2byte	0x0
+   4:	7200                	.2byte	0x7200
+   6:	7369                	.2byte	0x7369
+   8:	01007663          	bgeu	zero,a6,14 <self+0x14>
+   c:	002c                	.2byte	0x2c
+   e:	0000                	.2byte	0x0
+  10:	1004                	.2byte	0x1004
+  12:	7205                	.2byte	0x7205
+  14:	3376                	.2byte	0x3376
+  16:	6932                	.2byte	0x6932
+  18:	7032                	.2byte	0x7032
+  1a:	5f31                	.2byte	0x5f31
+  1c:	326d                	.2byte	0x326d
+  1e:	3070                	.2byte	0x3070
+  20:	7a5f 6369 7273      	.byte	0x5f, 0x7a, 0x69, 0x63, 0x73, 0x72
+  26:	7032                	.2byte	0x7032
+  28:	5f30                	.2byte	0x5f30
+  2a:	6d7a                	.2byte	0x6d7a
+  2c:	756d                	.2byte	0x756d
+  2e:	316c                	.2byte	0x316c
+  30:	3070                	.2byte	0x3070
+  32:	0800                	.2byte	0x800
+  34:	0a01                	.2byte	0xa01
+  36:	0b              	Address 0x36 is out of bounds.
+
+
+Disassembly of section .comment:
+
+00000000 <.comment>:
+   0:	3a434347          	.4byte	0x3a434347
+   4:	2820                	.2byte	0x2820
+   6:	29554e47          	.4byte	0x29554e47
+   a:	3120                	.2byte	0x3120
+   c:	2e32                	.2byte	0x2e32
+   e:	2e32                	.2byte	0x2e32
+  10:	0030                	.2byte	0x30

@@ -1,0 +1,220 @@
+
+bin/c.bin.elf:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+f8000000 <_start>:
+f8000000:	08001197          	auipc	gp,0x8001
+f8000004:	80018193          	add	gp,gp,-2048 # 800 <__global_pointer>
+f8000008:	10000117          	auipc	sp,0x10000
+f800000c:	ff810113          	add	sp,sp,-8 # 8000000 <__stack_ptr>
+f8000010:	138000ef          	jal	f8000148 <main>
+f8000014:	10500073          	wfi
+
+f8000018 <debug_write_message>:
+f8000018:	fe010113          	add	sp,sp,-32
+f800001c:	00812e23          	sw	s0,28(sp)
+f8000020:	02010413          	add	s0,sp,32
+f8000024:	fea42623          	sw	a0,-20(s0)
+f8000028:	feb42423          	sw	a1,-24(s0)
+f800002c:	800007b7          	lui	a5,0x80000
+f8000030:	fec42703          	lw	a4,-20(s0)
+f8000034:	00e7a023          	sw	a4,0(a5) # 80000000 <__stack_ptr+0x78000000>
+f8000038:	800007b7          	lui	a5,0x80000
+f800003c:	00478793          	add	a5,a5,4 # 80000004 <__stack_ptr+0x78000004>
+f8000040:	fe842703          	lw	a4,-24(s0)
+f8000044:	00e7a023          	sw	a4,0(a5)
+f8000048:	800007b7          	lui	a5,0x80000
+f800004c:	00c78793          	add	a5,a5,12 # 8000000c <__stack_ptr+0x7800000c>
+f8000050:	00100713          	li	a4,1
+f8000054:	00e7a023          	sw	a4,0(a5)
+f8000058:	800007b7          	lui	a5,0x80000
+f800005c:	00878793          	add	a5,a5,8 # 80000008 <__stack_ptr+0x78000008>
+f8000060:	0007a783          	lw	a5,0(a5)
+f8000064:	00078513          	mv	a0,a5
+f8000068:	01c12403          	lw	s0,28(sp)
+f800006c:	02010113          	add	sp,sp,32
+f8000070:	00008067          	ret
+
+f8000074 <debug_write_string>:
+f8000074:	fd010113          	add	sp,sp,-48
+f8000078:	02112623          	sw	ra,44(sp)
+f800007c:	02812423          	sw	s0,40(sp)
+f8000080:	03010413          	add	s0,sp,48
+f8000084:	fca42e23          	sw	a0,-36(s0)
+f8000088:	fdc42503          	lw	a0,-36(s0)
+f800008c:	0e0000ef          	jal	f800016c <strlen>
+f8000090:	fea42623          	sw	a0,-20(s0)
+f8000094:	fec42583          	lw	a1,-20(s0)
+f8000098:	fdc42503          	lw	a0,-36(s0)
+f800009c:	f7dff0ef          	jal	f8000018 <debug_write_message>
+f80000a0:	00050793          	mv	a5,a0
+f80000a4:	00078513          	mv	a0,a5
+f80000a8:	02c12083          	lw	ra,44(sp)
+f80000ac:	02812403          	lw	s0,40(sp)
+f80000b0:	03010113          	add	sp,sp,48
+f80000b4:	00008067          	ret
+
+f80000b8 <debug_flush>:
+f80000b8:	ff010113          	add	sp,sp,-16
+f80000bc:	00812623          	sw	s0,12(sp)
+f80000c0:	01010413          	add	s0,sp,16
+f80000c4:	800007b7          	lui	a5,0x80000
+f80000c8:	01078793          	add	a5,a5,16 # 80000010 <__stack_ptr+0x78000010>
+f80000cc:	00100713          	li	a4,1
+f80000d0:	00e7a023          	sw	a4,0(a5)
+f80000d4:	800007b7          	lui	a5,0x80000
+f80000d8:	00878793          	add	a5,a5,8 # 80000008 <__stack_ptr+0x78000008>
+f80000dc:	0007a783          	lw	a5,0(a5)
+f80000e0:	00078513          	mv	a0,a5
+f80000e4:	00c12403          	lw	s0,12(sp)
+f80000e8:	01010113          	add	sp,sp,16
+f80000ec:	00008067          	ret
+
+f80000f0 <debug_print>:
+f80000f0:	fe010113          	add	sp,sp,-32
+f80000f4:	00112e23          	sw	ra,28(sp)
+f80000f8:	00812c23          	sw	s0,24(sp)
+f80000fc:	02010413          	add	s0,sp,32
+f8000100:	fea42623          	sw	a0,-20(s0)
+f8000104:	fec42503          	lw	a0,-20(s0)
+f8000108:	f6dff0ef          	jal	f8000074 <debug_write_string>
+f800010c:	fadff0ef          	jal	f80000b8 <debug_flush>
+f8000110:	00000013          	nop
+f8000114:	00078513          	mv	a0,a5
+f8000118:	01c12083          	lw	ra,28(sp)
+f800011c:	01812403          	lw	s0,24(sp)
+f8000120:	02010113          	add	sp,sp,32
+f8000124:	00008067          	ret
+
+f8000128 <wfi>:
+f8000128:	ff010113          	add	sp,sp,-16
+f800012c:	00812623          	sw	s0,12(sp)
+f8000130:	01010413          	add	s0,sp,16
+f8000134:	10500073          	wfi
+f8000138:	00000013          	nop
+f800013c:	00c12403          	lw	s0,12(sp)
+f8000140:	01010113          	add	sp,sp,16
+f8000144:	00008067          	ret
+
+f8000148 <main>:
+f8000148:	ff010113          	add	sp,sp,-16
+f800014c:	00112623          	sw	ra,12(sp)
+f8000150:	00812423          	sw	s0,8(sp)
+f8000154:	01010413          	add	s0,sp,16
+f8000158:	f80007b7          	lui	a5,0xf8000
+f800015c:	1b878513          	add	a0,a5,440 # f80001b8 <strlen+0x4c>
+f8000160:	f91ff0ef          	jal	f80000f0 <debug_print>
+f8000164:	fc5ff0ef          	jal	f8000128 <wfi>
+f8000168:	ffdff06f          	j	f8000164 <main+0x1c>
+
+f800016c <strlen>:
+f800016c:	fd010113          	add	sp,sp,-48
+f8000170:	02812623          	sw	s0,44(sp)
+f8000174:	03010413          	add	s0,sp,48
+f8000178:	fca42e23          	sw	a0,-36(s0)
+f800017c:	fe042623          	sw	zero,-20(s0)
+f8000180:	0100006f          	j	f8000190 <strlen+0x24>
+f8000184:	fec42783          	lw	a5,-20(s0)
+f8000188:	00178793          	add	a5,a5,1
+f800018c:	fef42623          	sw	a5,-20(s0)
+f8000190:	fdc42703          	lw	a4,-36(s0)
+f8000194:	fec42783          	lw	a5,-20(s0)
+f8000198:	00f707b3          	add	a5,a4,a5
+f800019c:	0007c783          	lbu	a5,0(a5)
+f80001a0:	fe0792e3          	bnez	a5,f8000184 <strlen+0x18>
+f80001a4:	fec42783          	lw	a5,-20(s0)
+f80001a8:	00078513          	mv	a0,a5
+f80001ac:	02c12403          	lw	s0,44(sp)
+f80001b0:	03010113          	add	sp,sp,48
+f80001b4:	00008067          	ret
+f80001b8:	6548                	.2byte	0x6548
+f80001ba:	6c6c                	.2byte	0x6c6c
+f80001bc:	77202c6f          	jal	s8,f800292e <_etext+0x2752>
+f80001c0:	646c726f          	jal	tp,f80c7806 <_etext+0xc762a>
+f80001c4:	0021                	.2byte	0x21
+	...
+
+f80001c8 <debug_message_ptr>:
+f80001c8:	0000                	.2byte	0x0
+f80001ca:	8000                	.2byte	0x8000
+
+f80001cc <debug_length>:
+f80001cc:	0004                	.2byte	0x4
+f80001ce:	8000                	.2byte	0x8000
+
+f80001d0 <debug_status>:
+f80001d0:	0008                	.2byte	0x8
+f80001d2:	8000                	.2byte	0x8000
+
+f80001d4 <debug_print_trigger>:
+f80001d4:	000c                	.2byte	0xc
+f80001d6:	8000                	.2byte	0x8000
+
+f80001d8 <debug_flush_trigger>:
+f80001d8:	0010                	.2byte	0x10
+f80001da:	8000                	.2byte	0x8000
+
+Disassembly of section .eh_frame:
+
+f80001dc <__stack_ptr+0xf00001dc>:
+f80001dc:	0014                	.2byte	0x14
+f80001de:	0000                	.2byte	0x0
+f80001e0:	0000                	.2byte	0x0
+f80001e2:	0000                	.2byte	0x0
+f80001e4:	00527a03          	.4byte	0x527a03
+f80001e8:	7c01                	.2byte	0x7c01
+f80001ea:	0101                	.2byte	0x101
+f80001ec:	07020d1b          	.4byte	0x7020d1b
+f80001f0:	0001                	.2byte	0x1
+f80001f2:	0000                	.2byte	0x0
+f80001f4:	0010                	.2byte	0x10
+f80001f6:	0000                	.2byte	0x0
+f80001f8:	001c                	.2byte	0x1c
+f80001fa:	0000                	.2byte	0x0
+f80001fc:	fe04                	.2byte	0xfe04
+f80001fe:	ffff                	.2byte	0xffff
+f8000200:	0018                	.2byte	0x18
+f8000202:	0000                	.2byte	0x0
+f8000204:	0000                	.2byte	0x0
+	...
+
+Disassembly of section .riscv.attributes:
+
+00000000 <.riscv.attributes>:
+   0:	3b41                	.2byte	0x3b41
+   2:	0000                	.2byte	0x0
+   4:	7200                	.2byte	0x7200
+   6:	7369                	.2byte	0x7369
+   8:	01007663          	bgeu	zero,a6,14 <_bss+0x14>
+   c:	0031                	.2byte	0x31
+   e:	0000                	.2byte	0x0
+  10:	1004                	.2byte	0x1004
+  12:	7205                	.2byte	0x7205
+  14:	3376                	.2byte	0x3376
+  16:	6932                	.2byte	0x6932
+  18:	7032                	.2byte	0x7032
+  1a:	5f31                	.2byte	0x5f31
+  1c:	326d                	.2byte	0x326d
+  1e:	3070                	.2byte	0x3070
+  20:	665f 7032 5f32      	.byte	0x5f, 0x66, 0x32, 0x70, 0x32, 0x5f
+  26:	697a                	.2byte	0x697a
+  28:	32727363          	bgeu	tp,t2,34e <_bss+0x34e>
+  2c:	3070                	.2byte	0x3070
+  2e:	7a5f 6d6d 6c75      	.byte	0x5f, 0x7a, 0x6d, 0x6d, 0x75, 0x6c
+  34:	7031                	.2byte	0x7031
+  36:	0030                	.2byte	0x30
+  38:	0108                	.2byte	0x108
+  3a:	0b0a                	.2byte	0xb0a
+
+Disassembly of section .comment:
+
+00000000 <.comment>:
+   0:	3a434347          	.4byte	0x3a434347
+   4:	2820                	.2byte	0x2820
+   6:	29554e47          	.4byte	0x29554e47
+   a:	3120                	.2byte	0x3120
+   c:	2e32                	.2byte	0x2e32
+   e:	2e32                	.2byte	0x2e32
+  10:	0030                	.2byte	0x30
