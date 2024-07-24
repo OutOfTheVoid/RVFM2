@@ -9,6 +9,7 @@ typedef enum {
     GpuInterrupt = 0,
     PresentInterrupt = 1,
     VSyncInterrupt = 2,
+    SpuInterrupt = 3,
 } Interrupt;
 
 static volatile u32 * const pending_interrupts = (volatile u32 * const) 0x80030FC0;

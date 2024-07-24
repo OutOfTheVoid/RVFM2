@@ -1,4 +1,7 @@
-use super::{types::*, command_list::CommandList};
+use bytemuck::cast_slice_mut;
+
+use super::types::*;
+use crate::command_list::CommandList;
 
 pub enum Command {
     /*
@@ -156,9 +159,11 @@ impl Command {
                     let data_slice = &mut constant_data[0..buffer_size];
                     data_slice.iter_mut().enumerate().for_each(|(i, x)| *x = command_list.read_u8(offset + 4 + i as u32).unwrap_or_default());
                 }
+                let mut constant_data_u32 = [0u32; 4];
+                cast_slice_mut(&mut constant_data_u32).copy_from_slice(&constant_data);
                 Some((offset + 20, Command::SetConstantSampler {
                     constant_sampler,
-                    set: ConstantSampler { constant_data, data_type }
+                    set: ConstantSampler { constant_data: constant_data_u32, data_type }
                 }))
             },
             Some(0x00_03) => {

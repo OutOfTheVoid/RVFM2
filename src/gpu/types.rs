@@ -239,7 +239,7 @@ pub enum Sampler {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ConstantSampler {
-    pub constant_data : [u8; 16],
+    pub constant_data : [u32; 4],
     pub data_type     : PixelDataType,
 }
 
@@ -253,7 +253,7 @@ fn expand_unorm8_to_32(val: u8) -> u32 {
 impl ConstantSampler {
     pub fn new() -> Self {
         Self {
-            constant_data: [0; 16],
+            constant_data: [0; 4],
             data_type: PixelDataType::RgbaUNorm8,
         }
     }
@@ -262,30 +262,30 @@ impl ConstantSampler {
         let float_data = bytemuck::cast_slice::<_, f32>(&self.constant_data[..]);
         match self.data_type {
             PixelDataType::RUNorm8 => AbstractPixelData::UNorm32([
-                expand_unorm8_to_32(self.constant_data[0]),
+                expand_unorm8_to_32((self.constant_data[0] >> 0) as u8),
                 0,
                 0,
                 0,
             ]),
             PixelDataType::RgUNorm8 => AbstractPixelData::UNorm32([
-                expand_unorm8_to_32(self.constant_data[0]),
-                expand_unorm8_to_32(self.constant_data[1]),
+                expand_unorm8_to_32((self.constant_data[0] >> 0) as u8),
+                expand_unorm8_to_32((self.constant_data[0] >> 8) as u8),
                 0,
                 0,
             ]),
 
             PixelDataType::RgbUNorm8 => AbstractPixelData::UNorm32([
-                expand_unorm8_to_32(self.constant_data[0]),
-                expand_unorm8_to_32(self.constant_data[1]),
-                expand_unorm8_to_32(self.constant_data[2]),
+                expand_unorm8_to_32((self.constant_data[0] >> 0) as u8),
+                expand_unorm8_to_32((self.constant_data[0] >> 8) as u8),
+                expand_unorm8_to_32((self.constant_data[0] >> 16) as u8),
                 0,
             ]),
 
             PixelDataType::RgbaUNorm8 => AbstractPixelData::UNorm32([
-                expand_unorm8_to_32(self.constant_data[0]),
-                expand_unorm8_to_32(self.constant_data[1]),
-                expand_unorm8_to_32(self.constant_data[2]),
-                expand_unorm8_to_32(self.constant_data[3]),
+                expand_unorm8_to_32((self.constant_data[0] >> 0) as u8),
+                expand_unorm8_to_32((self.constant_data[0] >> 8) as u8),
+                expand_unorm8_to_32((self.constant_data[0] >> 16) as u8),
+                expand_unorm8_to_32((self.constant_data[0] >> 24) as u8),
             ]),
 
             PixelDataType::RF32 => AbstractPixelData::F32([

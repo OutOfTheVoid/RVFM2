@@ -1,6 +1,8 @@
 #pragma once
 
-#include "command_list.h"
+#include "../command_list.h"
+
+volatile usize * const GPU_COMMANDLIST_SUBMISSION_PORT = (((volatile usize *) 0x80010000));
 
 typedef enum {
     PixelDataLayoutD8x1 = 0,
@@ -100,7 +102,7 @@ inline static bool gpu_command_set_constant_sampler_rgba_unorm8(CommandListRecor
         0x02,
         0x00,
         constant_sampler,
-        0x03,             // PixelDataType::RgbaF32
+        0x03,
         colors[0],
         colors[1],
         colors[2],
@@ -249,4 +251,8 @@ inline static bool gpu_command_cutout_blit(CommandListRecorder * recorder, u8 sr
     return PUSH_COMMAND;
 }
 
-
+static inline void gpu_submit_commandlist(CommandList command_list, volatile u32 * completion_flag) {
+    *completion_flag = 0;
+    command_list->completion_flag = completion_flag;
+    *GPU_COMMANDLIST_SUBMISSION_PORT = (usize) command_list;
+}

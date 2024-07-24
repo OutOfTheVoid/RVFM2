@@ -6,8 +6,8 @@ MKDIR = mkdir
 RMDIR = rm -rf
 OBJDUMP = riscv64-unknown-elf-objdump
 
-AS_FLAGS = -march=rv32imf -Isrc -I../../sdk/c/inc
-CC_FLAGS = -march=rv32imf -mabi=ilp32 -Isrc -I../../sdk/c/inc -ffunction-sections
+AS_FLAGS = -march=rv32im_zicsr -Isrc -I../../sdk/c/inc
+CC_FLAGS = -march=rv32im_zicsr -mabi=ilp32 -Isrc -I../../sdk/c/inc -ffunction-sections
 LD_FLAGS = -T $(LD_SCRIPT) -nostdlib -b elf32-littleriscv
 OBJCOPY_FLAGS = --output-target=binary
 

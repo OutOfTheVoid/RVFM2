@@ -4,11 +4,11 @@ use std::sync::Arc;
 use bytemuck::{Pod, cast_slice, cast_slice_mut};
 
 use crate::interrupt_controller::{INTERRUPT_CONTROLLER, InterruptType};
-use crate::machine::{Machine, self};
+use crate::machine::Machine;
 use crate::ui::main_window::MainWindow;
+use crate::command_list::{CommandList, retire_commandlist};
 
 use super::command::Command;
-use super::command_list::{CommandList, retire_commandlist};
 use super::texture::*;
 use super::buffer::*;
 use super::types::{ConstantSampler, VideoMode, PixelDataLayout, ImageDataLayout, PixelDataType, ColorBlendOp, AlphaBlendOp};

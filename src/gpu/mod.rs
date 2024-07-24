@@ -1,5 +1,4 @@
 mod core;
-mod command_list;
 mod command;
 pub mod types;
 mod texture;
@@ -8,42 +7,18 @@ mod buffer;
 use std::{sync::{mpsc::{self, Receiver, TryRecvError}, Arc}};
 use parking_lot::Mutex;
 use static_init::dynamic;
-use crate::{machine::{WriteResult, ReadResult}, ui::main_window::MainWindow};
+use crate::{machine::{ReadResult, WriteResult}, pointer_queue::PointerQueue, ui::main_window::MainWindow};
 
-use self::{command_list::parse_commandlist_header, core::Core};
+use core::Core;
+use super::command_list::parse_commandlist_header;
 
 use super::Machine;
 
-struct GpuQueue {
-    pub rx: Option<mpsc::Receiver<u32>>,
-    pub tx: mpsc::Sender<u32>,
-}
-
-impl GpuQueue {
-    pub fn take_rx(&mut self) -> mpsc::Receiver<u32> {
-        self.rx.take().unwrap()
-    }
-
-    pub fn make_tx(&self) -> mpsc::Sender<u32>{
-        self.tx.clone()
-    }
-
-    pub fn new() -> Self {
-        let (tx, rx) = mpsc::channel();
-        Self {
-            rx: Some(rx),
-            tx
-        }
-    }
-}
-
-unsafe impl Send for GpuQueue {}
-
 #[dynamic]
-static GPU_QUEUE: Mutex<GpuQueue> = Mutex::new(GpuQueue::new());
+static GPU_QUEUE: Mutex<PointerQueue> = Mutex::new(PointerQueue::new());
 
 thread_local! {
-    static GPU_QUEUE_LOCAL: mpsc::Sender<u32> = GPU_QUEUE.lock().make_tx();
+    static GPU_QUEUE_LOCAL: mpsc::Sender<(u32, u32)> = GPU_QUEUE.lock().make_tx();
 }
 
 pub fn gpu_init(machine: &Arc<Machine>, main_window: MainWindow) {
@@ -54,11 +29,11 @@ pub fn gpu_init(machine: &Arc<Machine>, main_window: MainWindow) {
     });
 }
 
-fn gpu_thread(queue: Receiver<u32>, machine: Arc<Machine>, main_window: MainWindow) {
+fn gpu_thread(queue: Receiver<(u32, u32)>, machine: Arc<Machine>, main_window: MainWindow) {
     let mut core = Core::new();
     loop {
         match queue.recv() {
-            Ok(commandlist_addr) => {
+            Ok((queue_index, commandlist_addr)) => {
                 match parse_commandlist_header(commandlist_addr, &machine) {
                     Ok(command_list) => {
                         core.add_command_list(command_list);
@@ -74,7 +49,7 @@ fn gpu_thread(queue: Receiver<u32>, machine: Arc<Machine>, main_window: MainWind
         };
         'receive: loop {
             match queue.try_recv() {
-                Ok(commandlist_addr) => {
+                Ok((queue_index, commandlist_addr)) => {
                     match parse_commandlist_header(commandlist_addr, &machine) {
                         Ok(command_list) => {
                             core.add_command_list(command_list);
@@ -96,7 +71,7 @@ pub fn gpu_write_u32(offset: u32, value: u32) -> WriteResult {
     match offset {
         0 => {
             GPU_QUEUE_LOCAL.with(|queue| {
-                queue.send(value).unwrap();
+                queue.send((0, value)).unwrap();
             });
             WriteResult::Ok
         },

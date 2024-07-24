@@ -8,6 +8,8 @@ pub enum Hart {
     Hart3,
 }
 
+const HART_START_TRIGGER_BASE: u32 = 0x80020000;
+
 impl Hart {
     pub fn current() -> Self {
         let id_raw = unsafe { hart_id_raw() };
@@ -20,12 +22,17 @@ impl Hart {
         }
     }
 
-    pub fn to_u32(&self) -> u32 {
+    pub fn to_u32(self) -> u32 {
         match self {
             Self::Hart0 => 0,
             Self::Hart1 => 1,
             Self::Hart2 => 2,
             Self::Hart3 => 3,
         }
+    }
+
+    pub fn start(self, start_address: *const ()) {
+        let address = HART_START_TRIGGER_BASE + self.to_u32() << 2;
+        unsafe { core::ptr::write(address as usize as *mut u32, start_address as usize as u32); }
     }
 }

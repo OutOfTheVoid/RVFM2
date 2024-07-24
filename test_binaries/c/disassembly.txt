@@ -9,7 +9,7 @@ f8000000:	08001197          	auipc	gp,0x8001
 f8000004:	80018193          	add	gp,gp,-2048 # 800 <__global_pointer>
 f8000008:	10000117          	auipc	sp,0x10000
 f800000c:	ff810113          	add	sp,sp,-8 # 8000000 <__stack_ptr>
-f8000010:	138000ef          	jal	f8000148 <main>
+f8000010:	164000ef          	jal	f8000174 <main>
 f8000014:	10500073          	wfi
 
 f8000018 <debug_write_message>:
@@ -44,7 +44,7 @@ f800007c:	02812423          	sw	s0,40(sp)
 f8000080:	03010413          	add	s0,sp,48
 f8000084:	fca42e23          	sw	a0,-36(s0)
 f8000088:	fdc42503          	lw	a0,-36(s0)
-f800008c:	0e0000ef          	jal	f800016c <strlen>
+f800008c:	118000ef          	jal	f80001a4 <strlen>
 f8000090:	fea42623          	sw	a0,-20(s0)
 f8000094:	fec42583          	lw	a1,-20(s0)
 f8000098:	fdc42503          	lw	a0,-36(s0)
@@ -88,96 +88,109 @@ f800011c:	01812403          	lw	s0,24(sp)
 f8000120:	02010113          	add	sp,sp,32
 f8000124:	00008067          	ret
 
-f8000128 <wfi>:
-f8000128:	ff010113          	add	sp,sp,-16
-f800012c:	00812623          	sw	s0,12(sp)
-f8000130:	01010413          	add	s0,sp,16
-f8000134:	10500073          	wfi
-f8000138:	00000013          	nop
-f800013c:	00c12403          	lw	s0,12(sp)
-f8000140:	01010113          	add	sp,sp,16
-f8000144:	00008067          	ret
+f8000128 <get_input>:
+f8000128:	fd010113          	add	sp,sp,-48
+f800012c:	02812623          	sw	s0,44(sp)
+f8000130:	03010413          	add	s0,sp,48
+f8000134:	fca42e23          	sw	a0,-36(s0)
+f8000138:	fdc42783          	lw	a5,-36(s0)
+f800013c:	00279713          	sll	a4,a5,0x2
+f8000140:	800507b7          	lui	a5,0x80050
+f8000144:	00f707b3          	add	a5,a4,a5
+f8000148:	fef42623          	sw	a5,-20(s0)
+f800014c:	fec42783          	lw	a5,-20(s0)
+f8000150:	0007a783          	lw	a5,0(a5) # 80050000 <__stack_ptr+0x78050000>
+f8000154:	fef42423          	sw	a5,-24(s0)
+f8000158:	fe842783          	lw	a5,-24(s0)
+f800015c:	00f037b3          	snez	a5,a5
+f8000160:	0ff7f793          	zext.b	a5,a5
+f8000164:	00078513          	mv	a0,a5
+f8000168:	02c12403          	lw	s0,44(sp)
+f800016c:	03010113          	add	sp,sp,48
+f8000170:	00008067          	ret
 
-f8000148 <main>:
-f8000148:	ff010113          	add	sp,sp,-16
-f800014c:	00112623          	sw	ra,12(sp)
-f8000150:	00812423          	sw	s0,8(sp)
-f8000154:	01010413          	add	s0,sp,16
-f8000158:	f80007b7          	lui	a5,0xf8000
-f800015c:	1b878513          	add	a0,a5,440 # f80001b8 <strlen+0x4c>
-f8000160:	f91ff0ef          	jal	f80000f0 <debug_print>
-f8000164:	fc5ff0ef          	jal	f8000128 <wfi>
-f8000168:	ffdff06f          	j	f8000164 <main+0x1c>
+f8000174 <main>:
+f8000174:	ff010113          	add	sp,sp,-16
+f8000178:	00112623          	sw	ra,12(sp)
+f800017c:	00812423          	sw	s0,8(sp)
+f8000180:	01010413          	add	s0,sp,16
+f8000184:	00000513          	li	a0,0
+f8000188:	fa1ff0ef          	jal	f8000128 <get_input>
+f800018c:	00050793          	mv	a5,a0
+f8000190:	00078863          	beqz	a5,f80001a0 <main+0x2c>
+f8000194:	f80007b7          	lui	a5,0xf8000
+f8000198:	1f078513          	add	a0,a5,496 # f80001f0 <strlen+0x4c>
+f800019c:	f55ff0ef          	jal	f80000f0 <debug_print>
+f80001a0:	0000006f          	j	f80001a0 <main+0x2c>
 
-f800016c <strlen>:
-f800016c:	fd010113          	add	sp,sp,-48
-f8000170:	02812623          	sw	s0,44(sp)
-f8000174:	03010413          	add	s0,sp,48
-f8000178:	fca42e23          	sw	a0,-36(s0)
-f800017c:	fe042623          	sw	zero,-20(s0)
-f8000180:	0100006f          	j	f8000190 <strlen+0x24>
-f8000184:	fec42783          	lw	a5,-20(s0)
-f8000188:	00178793          	add	a5,a5,1
-f800018c:	fef42623          	sw	a5,-20(s0)
-f8000190:	fdc42703          	lw	a4,-36(s0)
-f8000194:	fec42783          	lw	a5,-20(s0)
-f8000198:	00f707b3          	add	a5,a4,a5
-f800019c:	0007c783          	lbu	a5,0(a5)
-f80001a0:	fe0792e3          	bnez	a5,f8000184 <strlen+0x18>
-f80001a4:	fec42783          	lw	a5,-20(s0)
-f80001a8:	00078513          	mv	a0,a5
-f80001ac:	02c12403          	lw	s0,44(sp)
-f80001b0:	03010113          	add	sp,sp,48
-f80001b4:	00008067          	ret
-f80001b8:	6548                	.2byte	0x6548
-f80001ba:	6c6c                	.2byte	0x6c6c
-f80001bc:	77202c6f          	jal	s8,f800292e <_etext+0x2752>
-f80001c0:	646c726f          	jal	tp,f80c7806 <_etext+0xc762a>
-f80001c4:	0021                	.2byte	0x21
+f80001a4 <strlen>:
+f80001a4:	fd010113          	add	sp,sp,-48
+f80001a8:	02812623          	sw	s0,44(sp)
+f80001ac:	03010413          	add	s0,sp,48
+f80001b0:	fca42e23          	sw	a0,-36(s0)
+f80001b4:	fe042623          	sw	zero,-20(s0)
+f80001b8:	0100006f          	j	f80001c8 <strlen+0x24>
+f80001bc:	fec42783          	lw	a5,-20(s0)
+f80001c0:	00178793          	add	a5,a5,1
+f80001c4:	fef42623          	sw	a5,-20(s0)
+f80001c8:	fdc42703          	lw	a4,-36(s0)
+f80001cc:	fec42783          	lw	a5,-20(s0)
+f80001d0:	00f707b3          	add	a5,a4,a5
+f80001d4:	0007c783          	lbu	a5,0(a5)
+f80001d8:	fe0792e3          	bnez	a5,f80001bc <strlen+0x18>
+f80001dc:	fec42783          	lw	a5,-20(s0)
+f80001e0:	00078513          	mv	a0,a5
+f80001e4:	02c12403          	lw	s0,44(sp)
+f80001e8:	03010113          	add	sp,sp,48
+f80001ec:	00008067          	ret
+f80001f0:	7075                	.2byte	0x7075
+f80001f2:	203a                	.2byte	0x203a
+f80001f4:	4f44                	.2byte	0x4f44
+f80001f6:	00004e57          	.4byte	0x4e57
 	...
 
-f80001c8 <debug_message_ptr>:
-f80001c8:	0000                	.2byte	0x0
-f80001ca:	8000                	.2byte	0x8000
+f80001fc <debug_message_ptr>:
+f80001fc:	0000                	.2byte	0x0
+f80001fe:	8000                	.2byte	0x8000
 
-f80001cc <debug_length>:
-f80001cc:	0004                	.2byte	0x4
-f80001ce:	8000                	.2byte	0x8000
+f8000200 <debug_length>:
+f8000200:	0004                	.2byte	0x4
+f8000202:	8000                	.2byte	0x8000
 
-f80001d0 <debug_status>:
-f80001d0:	0008                	.2byte	0x8
-f80001d2:	8000                	.2byte	0x8000
+f8000204 <debug_status>:
+f8000204:	0008                	.2byte	0x8
+f8000206:	8000                	.2byte	0x8000
 
-f80001d4 <debug_print_trigger>:
-f80001d4:	000c                	.2byte	0xc
-f80001d6:	8000                	.2byte	0x8000
+f8000208 <debug_print_trigger>:
+f8000208:	000c                	.2byte	0xc
+f800020a:	8000                	.2byte	0x8000
 
-f80001d8 <debug_flush_trigger>:
-f80001d8:	0010                	.2byte	0x10
-f80001da:	8000                	.2byte	0x8000
+f800020c <debug_flush_trigger>:
+f800020c:	0010                	.2byte	0x10
+f800020e:	8000                	.2byte	0x8000
 
 Disassembly of section .eh_frame:
 
-f80001dc <__stack_ptr+0xf00001dc>:
-f80001dc:	0014                	.2byte	0x14
-f80001de:	0000                	.2byte	0x0
-f80001e0:	0000                	.2byte	0x0
-f80001e2:	0000                	.2byte	0x0
-f80001e4:	00527a03          	.4byte	0x527a03
-f80001e8:	7c01                	.2byte	0x7c01
-f80001ea:	0101                	.2byte	0x101
-f80001ec:	07020d1b          	.4byte	0x7020d1b
-f80001f0:	0001                	.2byte	0x1
-f80001f2:	0000                	.2byte	0x0
-f80001f4:	0010                	.2byte	0x10
-f80001f6:	0000                	.2byte	0x0
-f80001f8:	001c                	.2byte	0x1c
-f80001fa:	0000                	.2byte	0x0
-f80001fc:	fe04                	.2byte	0xfe04
-f80001fe:	ffff                	.2byte	0xffff
-f8000200:	0018                	.2byte	0x18
-f8000202:	0000                	.2byte	0x0
-f8000204:	0000                	.2byte	0x0
+f8000210 <__stack_ptr+0xf0000210>:
+f8000210:	0014                	.2byte	0x14
+f8000212:	0000                	.2byte	0x0
+f8000214:	0000                	.2byte	0x0
+f8000216:	0000                	.2byte	0x0
+f8000218:	00527a03          	.4byte	0x527a03
+f800021c:	7c01                	.2byte	0x7c01
+f800021e:	0101                	.2byte	0x101
+f8000220:	07020d1b          	.4byte	0x7020d1b
+f8000224:	0001                	.2byte	0x1
+f8000226:	0000                	.2byte	0x0
+f8000228:	0010                	.2byte	0x10
+f800022a:	0000                	.2byte	0x0
+f800022c:	001c                	.2byte	0x1c
+f800022e:	0000                	.2byte	0x0
+f8000230:	fdd0                	.2byte	0xfdd0
+f8000232:	ffff                	.2byte	0xffff
+f8000234:	0018                	.2byte	0x18
+f8000236:	0000                	.2byte	0x0
+f8000238:	0000                	.2byte	0x0
 	...
 
 Disassembly of section .riscv.attributes:
@@ -213,7 +226,7 @@ Disassembly of section .comment:
 00000000 <.comment>:
    0:	3a434347          	.4byte	0x3a434347
    4:	2820                	.2byte	0x2820
-   6:	29554e47          	fmsub.s	ft8,fa0,fs5,ft5,rmm
+   6:	29554e47          	.4byte	0x29554e47
    a:	3120                	.2byte	0x3120
    c:	2e32                	.2byte	0x2e32
    e:	2e32                	.2byte	0x2e32

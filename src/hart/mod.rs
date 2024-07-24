@@ -128,7 +128,7 @@ impl Hart {
     }
 
     fn take_interrupt(&mut self, cause: InterruptCause) {
-        //println!("take_interrupt({:?})", cause);
+        println!("take_interrupt({:?})", cause);
         self.csrs.mepc = self.pc;
         self.csrs.mcause = cause.to_mcause();
         if let Some(mtval) = cause.to_mtval() {
@@ -136,7 +136,7 @@ impl Hart {
         }
         self.csrs.mstatus.enter_interrupt();
         self.pc = self.csrs.mtvec.get_vector_address(cause.to_vector());
-        println!("pc: {:08X}", self.pc);
+        println!("interrupt vector address: {:08X}", self.pc);
     }
 
     pub fn set_gpr(&mut self, gpr: u8, value: u32) {
@@ -162,12 +162,12 @@ impl Hart {
             x13: {:08X}, x14: {:08X}, x15: {:08X}, x16: {:08X}
             
             pc: {:#010X} - {:08X}: {:?}"#, 
-                        self.gprs[1], self.gprs[2], self.gprs[3], self.gprs[4],
-                        self.gprs[5], self.gprs[6], self.gprs[7], self.gprs[8],
-                        self.gprs[9], self.gprs[10], self.gprs[11], self.gprs[12],
-                        self.gprs[13], self.gprs[14], self.gprs[15], self.gprs[16],
-                        pc, opcode, op,
-                    )
+            self.gprs[1], self.gprs[2], self.gprs[3], self.gprs[4],
+            self.gprs[5], self.gprs[6], self.gprs[7], self.gprs[8],
+            self.gprs[9], self.gprs[10], self.gprs[11], self.gprs[12],
+            self.gprs[13], self.gprs[14], self.gprs[15], self.gprs[16],
+            pc, opcode, op,
+        )
     }
 
     fn interrupt_check(&mut self) {

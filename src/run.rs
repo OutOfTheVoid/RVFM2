@@ -25,13 +25,16 @@ fn run_hart_clocked(hart_id: usize, mut hart: Hart) {
             ClockEvent::Reset(reset_addr) => {
                 hart.reset(reset_addr);
             },
-            ClockEvent::Cycles(mut cycles) => {
+            ClockEvent::Cycles(cycles) => {
+                let mut elapsed_cycles = 0;
                 for i in 0..cycles {
                     match hart.single_step::<false>() {
-                        StepState::Run => {},
+                        StepState::Run => {
+                            elapsed_cycles += 1;
+                        },
                         StepState::WaitForInterrupt => {
                             clock.wfi();
-                            cycles = i + 1;
+                            elapsed_cycles += 1;
                             break;
                         }
                         StepState::InstructionError | StepState::BusError => {
@@ -40,7 +43,7 @@ fn run_hart_clocked(hart_id: usize, mut hart: Hart) {
                         }
                     }
                 }
-                clock.register_cycles(cycles);
+                clock.register_cycles(elapsed_cycles);
             }
         }
     }

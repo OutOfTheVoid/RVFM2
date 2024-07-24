@@ -1,8 +1,0 @@
-[target.riscv32i-unknown-none-elf]
-rustflags = [
-    "-C", "link-arg=-T../../link/link.ld",   # Add linker script "{projectdir}/res/memory.ld"
-    "-C", "opt-level=0",                # Don't optimize
-]
-
-[build]
-target = "riscv32i-unknown-none-elf"

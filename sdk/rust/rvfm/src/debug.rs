@@ -71,15 +71,19 @@ impl Write for DebugWriter {
 #[macro_export]
 macro_rules! __println__ {
     () => {
-        use core::fmt::Write;
-        let _ = rvfm::debug::write_str("\n");
-        rvfm::debug::flush();
+        {
+            use core::fmt::Write;
+            let _ = rvfm::debug::write_str("\n");
+            rvfm::debug::flush();
+        }
     };
     ($($arg:tt)*) => {
-        use core::fmt::Write;
-        let mut writer = rvfm::debug::DebugWriter;
-        let _ = write!(&mut writer, $($arg)*);
-        rvfm::debug::flush();
+        {
+            use core::fmt::Write;
+            let mut writer = rvfm::debug::DebugWriter;
+            let _ = write!(&mut writer, $($arg)*);
+            rvfm::debug::flush();
+        }
     };
 }
 

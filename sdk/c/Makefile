@@ -8,8 +8,8 @@ RMDIR = rm -rf
 
 LD_SCRIPT = $(SELF_DIR)../link/link.ld
 
-AS_FLAGS = -march=rv32imf -Iinc
-CC_FLAGS = -march=rv32imf -mabi=ilp32 -Isrc -I../../sdk/c/inc -ffunction-sections -fdata-sections
+AS_FLAGS = -march=rv32im_zicsr -Iinc
+CC_FLAGS = -march=rv32im_zicsr -mabi=ilp32 -Isrc -I../../sdk/c/inc -ffunction-sections -fdata-sections
 LD_FLAGS = -T $(LD_SCRIPT) -nostdlib -b elf32-littleriscv -A RISCV32
 
 OBJ_DIR = $(SELF_DIR)obj

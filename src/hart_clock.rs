@@ -5,7 +5,6 @@ use static_init::dynamic;
 use crate::machine::{WriteResult, ReadResult};
 
 const HART_CYCLES_PER_FRAME: usize = 500000;
-pub const HART_CYCLE_UNIT: usize = 500;
 
 #[derive(Clone)]
 pub struct HartClockMaster {

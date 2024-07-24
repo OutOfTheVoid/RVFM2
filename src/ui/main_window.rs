@@ -1,3 +1,4 @@
+use std::sync::atomic;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -17,6 +18,7 @@ use crate::hart_clock::HART_CLOCK_MASTER;
 use crate::interrupt_controller::INTERRUPT_CONTROLLER;
 use crate::interrupt_controller::InterruptType;
 use crate::machine::Machine;
+use crate::input::*;
 
 #[derive(Clone)]
 enum WindowMessage {
@@ -90,17 +92,23 @@ impl MainWindow {
                     let size = video_resolution.pixel_count() * 4;
                     let texture_data_slice = unsafe { std::slice::from_raw_parts(texture_data, size) };
                     pixels.frame_mut().copy_from_slice(texture_data_slice);
+                    println!("writing present completion: {:010X}", completion_address);
                     machine.write_u32(completion_address, 1);
+                    atomic::fence(atomic::Ordering::Release);
                     if interrupt {
+                        println!("triggering present interrupt!");
                         INTERRUPT_CONTROLLER.trigger_interrupt(InterruptType::Present);
                     }
                     pixels.render().expect("Failed to render screen");
                 }
-                Event::WindowEvent { window_id: _, event } => {
+                Event::WindowEvent { event, .. } => {
                     match event {
                         WindowEvent::CloseRequested => {
                             *control_flow = ControlFlow::ExitWithCode(0);
                         },
+                        WindowEvent::KeyboardInput { input, .. } => {
+                            input_keyboard_event_handler(input);
+                        }
                         _ => {}
                     }
                 },

@@ -213,7 +213,7 @@ Disassembly of section .comment:
 00000000 <.comment>:
    0:	3a434347          	.4byte	0x3a434347
    4:	2820                	.2byte	0x2820
-   6:	29554e47          	fmsub.s	ft8,fa0,fs5,ft5,rmm
+   6:	29554e47          	.4byte	0x29554e47
    a:	3120                	.2byte	0x3120
    c:	2e32                	.2byte	0x2e32
    e:	2e32                	.2byte	0x2e32

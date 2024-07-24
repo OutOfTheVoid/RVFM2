@@ -1,2 +1,5 @@
+[target.riscv32i-unknown-none-elf]
+rustflags = ['-Clink-arg=-Tlink.ld']
+
 [build]
 target = "riscv32i-unknown-none-elf"

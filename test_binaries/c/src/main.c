@@ -1,9 +1,11 @@
 #include "dbg.h"
 #include "intrin.h"
+#include "input.h"
 
 void main() {
-    debug_print("Hello, world!");
-    while (1) {
-        wfi();
+    if (get_input(InputIdUp)) {
+        debug_print("up: DOWN");
     }
+
+    while(1) {}
 }

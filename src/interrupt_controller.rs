@@ -39,6 +39,7 @@ pub enum InterruptType {
     Gpu,
     Present,
     VSync,
+    Spu,
 }
 
 pub enum PendingInterrupt {
@@ -51,6 +52,7 @@ pub struct InterruptController {
     gpu_interrupt: RwLock<Interrupt>,
     present_interrupt: RwLock<Interrupt>,
     vsync_interrupt: RwLock<Interrupt>,
+    spu_interrupt: RwLock<Interrupt>,
     ihis: [RwLock<InterHartInterrupt>; 4],
     mips: [AtomicU32; 4],
 }
@@ -64,6 +66,7 @@ impl InterruptController {
             gpu_interrupt: RwLock::new(Interrupt::new()),
             present_interrupt: RwLock::new(Interrupt::new()),
             vsync_interrupt: RwLock::new(Interrupt::new()),
+            spu_interrupt: RwLock::new(Interrupt::new()),
             ihis: [(); 4].map(|_| RwLock::new(InterHartInterrupt::new())),
             mips: [(); 4].map(|_| AtomicU32::new(0))
         }
@@ -74,6 +77,7 @@ impl InterruptController {
             0 => Some(&self.gpu_interrupt),
             1 => Some(&self.present_interrupt),
             2 => Some(&self.vsync_interrupt),
+            3 => Some(&self.spu_interrupt),
             _ => None
         }
     }
@@ -119,6 +123,7 @@ impl InterruptController {
             InterruptType::Gpu => self.update_and_propogate_interrupt(&self.gpu_interrupt, |interrupt| interrupt.flag = true),
             InterruptType::Present => self.update_and_propogate_interrupt(&self.present_interrupt, |interrupt| interrupt.flag = true),
             InterruptType::VSync => self.update_and_propogate_interrupt(&self.vsync_interrupt, |interrupt| interrupt.flag = true),
+            InterruptType::Spu => self.update_and_propogate_interrupt(&self.spu_interrupt, |interrupt| interrupt.flag = true),
             _ => {}
         }
     }
@@ -127,7 +132,8 @@ impl InterruptController {
         if
             Self::check_interrupt(&self.gpu_interrupt.read(), hart) ||
             Self::check_interrupt(&self.vsync_interrupt.read(), hart) ||
-            Self::check_interrupt(&self.present_interrupt.read(), hart) {
+            Self::check_interrupt(&self.present_interrupt.read(), hart) ||
+            Self::check_interrupt(&self.spu_interrupt.read(), hart) {
             Some(PendingInterrupt::External)
         } else if self.check_ihi(hart) {
             Some(PendingInterrupt::InterHart)
@@ -140,6 +146,8 @@ impl InterruptController {
         if Self::check_interrupt(&self.gpu_interrupt.read(), hart) { return Some(0) };
         if Self::check_interrupt(&self.vsync_interrupt.read(), hart) { return Some(1) };
         if Self::check_interrupt(&self.present_interrupt.read(), hart) { return Some(2) };
+        if Self::check_interrupt(&self.spu_interrupt.read(), hart) { return Some(3) };
+        if Self::check_ihi(&self, hart) { return Some(0xFF) }
         None
     }
 
