@@ -3,6 +3,7 @@ mod command;
 pub mod types;
 mod texture;
 mod buffer;
+mod shader;
 
 use std::{sync::{mpsc::{self, Receiver, TryRecvError}, Arc}};
 use parking_lot::Mutex;

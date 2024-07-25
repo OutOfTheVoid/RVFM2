@@ -197,9 +197,9 @@ fn spu_render(regs: &SpuRegisters, machine: &Arc<Machine>, command_queues: &mut 
             }
         }
     }
-    loop {
-        let sample_counter = regs.sample_counter.fetch_add(1, atomic::Ordering::AcqRel);
-        for command_queue in &mut command_queues[..] {
+    let sample_counter = regs.sample_counter.fetch_add(1, atomic::Ordering::AcqRel);
+    for command_queue in &mut command_queues[..] {
+        loop {
             if let Some(command) = command_queue.front_mut() {
                 let mut replacement = None;
                 let pop = match command {

@@ -1,10 +1,12 @@
-use std::{sync::{Arc, mpsc::{Receiver, self, TryRecvError}}, io::{Write, Stdout, Stdin, Read}, fs::File, collections::{HashMap, BTreeMap}, path::Path, ops::{Bound, Sub}};
+use std::{sync::{Arc, mpsc::{Receiver, self, TryRecvError}}, io::{Stdout, Stdin, Read}, fs::File, collections::{HashMap, BTreeMap}, path::Path, ops::{Bound, Sub}};
 
 use elf_utilities::{*, file::{ELF, ELF32}, symbol::Symbol32, section::Contents32};
 use gdbstub_arch::riscv::Riscv32;
-use noline::{sync::Editor, builder::EditorBuilder};
+use noline::{builder::EditorBuilder, sync::{Editor, Write as _}};
+use parking_lot::{Condvar, Mutex};
 use std::io;
 use termion::raw::IntoRawMode;
+use std::fmt::Write;
 
 
 use crate::{machine::{Machine, ReadResult}, hart::{Hart, StepState, self, decoder::Rv32Op, csrs::SharedCSRs}, debugger::command::DataType};
@@ -38,13 +40,25 @@ pub struct Debugger {
     breakpoint_id_counter : usize,
 }
 
+enum StdinLineStreamMessage {
+    Prompt,
+    Write(String),
+    Shutdown,
+}
+
 struct StdinLineStream {
     line_rx: Receiver<String>,
+    message_tx: mpsc::Sender<StdinLineStreamMessage>
 }
 
 impl StdinLineStream {
     pub fn new() -> Self {
         let (line_tx, line_rx) = mpsc::channel();
+        let prompt_mutex = Arc::new(Mutex::new(true));
+        let prompt_cv = Arc::new(Condvar::new());
+        let thread_prompt_mutex = prompt_mutex.clone();
+        let thread_prompt_cv = prompt_cv.clone();
+        let (message_tx, message_rx) = mpsc::channel();
         std::thread::spawn(move || {
             let mut io = noline::sync::std::IO::new(
                 std::io::stdin(),
@@ -56,15 +70,31 @@ impl StdinLineStream {
                 .unwrap();
             let mut prompt = "> ";
             loop {
+                loop {
+                    match message_rx.recv() {
+                        Err(error) => {
+                            println!("Receive Error in StdinLineStream readline loop thread: {:?}", error);
+                        },
+                        Ok(StdinLineStreamMessage::Write(message)) => {
+                            io.write(message.as_bytes());
+                        },
+                        Ok(StdinLineStreamMessage::Prompt) => {
+                            break;
+                        }
+                        Ok(StdinLineStreamMessage::Shutdown) => {
+                            return;
+                        }
+                    }
+                }
                 match editor.readline(prompt, &mut io) {
                     Ok(line) => line_tx.send(line.to_owned()).unwrap(),
                     Err(_) => {},
                 }
-                prompt = "";
             }
         });
         Self {
-            line_rx
+            line_rx,
+            message_tx
         }
     }
 
@@ -78,6 +108,20 @@ impl StdinLineStream {
             Err(TryRecvError::Empty) => None,
             Err(_) => panic!("channel closed!")
         }
+    }
+
+    pub fn prompt(&mut self) {
+        self.message_tx.send(StdinLineStreamMessage::Prompt);
+    }
+
+    pub fn write(&mut self, message: String) {
+        self.message_tx.send(StdinLineStreamMessage::Write(message));
+    }
+}
+
+impl Drop for StdinLineStream {
+    fn drop(&mut self) {
+        _ = self.message_tx.send(StdinLineStreamMessage::Shutdown);
     }
 }
 
@@ -93,20 +137,10 @@ impl Debugger {
             ],
             machine,
             alive: true,
-            exec_modes: [
-                HartExecutionMode::Stopped,
-                HartExecutionMode::Stopped,
-                HartExecutionMode::Stopped,
-                HartExecutionMode::Stopped,
-            ],
+            exec_modes: [HartExecutionMode::Stopped; 4],
             breakpoints: Vec::new(),
             breakpoint_id_counter: 0,
         }
-    }
-
-    fn prompt(stdout: &mut Stdout) {
-        print!("\r\n> ");
-        stdout.flush().unwrap();
     }
 
     fn print_instruction(machine: &Arc<Machine>, address: u32, current: bool) {
@@ -116,9 +150,9 @@ impl Debugger {
         };
         let opcode = hart::decoder::Rv32Op::decode(opcode_value);
         if current {
-            print!("> {:08X}: {:08X} {}\r\n", address, opcode_value, opcode.assembly(address));
+            println!("> {:08X}: {:08X} {}", address, opcode_value, opcode.assembly(address));
         } else {
-            print!("  {:08X}: {:08X} {}\r\n", address, opcode_value, opcode.assembly(address));
+            println!("  {:08X}: {:08X} {}", address, opcode_value, opcode.assembly(address));
         }
     }
 
@@ -149,7 +183,8 @@ impl Debugger {
             };
         let mut addr = start_addr;
         if let Some(symbol_string) = symbol_string {
-            print!("  {symbol_string}\r\n\r\n");
+            println!("  {symbol_string}");
+            println!("")
         }
         while addr < end_addr {
             Self::print_instruction(machine, addr, addr == address);
@@ -167,7 +202,7 @@ impl Debugger {
     }
 
     pub fn run(mut self, file_path: Option<&str>) {
-        print!("rvfm debugger\r\n");
+        println!("rvfm debugger");
         let mut symbol_table: HashMap<String, u32> = HashMap::new();
         let mut symbol_tree: BTreeMap<u32, (String, symbol::Type)> = BTreeMap::new();
         let mut stdout = std::io::stdout();
@@ -177,6 +212,10 @@ impl Debugger {
         let mut hart_breakpoints = [0usize; 4];
         let mut current_hart = 0;
         let mut print_prompt = true;
+
+        last_execution_modes[0] = HartExecutionMode::HitBreakpoint;
+        self.exec_modes[0] = HartExecutionMode::HitBreakpoint;
+
         if let Some(file_path) = file_path {
             match elf_utilities::parser::parse_elf32(file_path) {
                 Ok(elf) => {
@@ -203,7 +242,7 @@ impl Debugger {
                     }
                 },
                 Err(error) => {
-                    print!("failed to read elf file: {}\r\n", error.to_string());
+                    line_stream.write(format!("failed to read elf file: {}", error.to_string()));
                 }
             }
         }
@@ -220,7 +259,7 @@ impl Debugger {
                             last_breakpoint_addrs[hart] = pc;
                             hart_breakpoints[hart] = i;
                             hit_breakpoint = true;
-                            print!("hart {hart} hit breakpoint: {:08X}\r\n", pc);
+                            println!("hart {hart} hit breakpoint: {:08X}", pc);
                             break;
                         }
                     }
@@ -244,25 +283,33 @@ impl Debugger {
                 if self.exec_modes[hart] != last_execution_modes[hart] {
                     stop |= match self.exec_modes[hart] {
                         HartExecutionMode::Stopped => {
-                            print!("\nhart {} stopped! pc: {:08X}\r\n\r\n", hart, self.harts[hart].pc);
+                            println!("");
+                            println!("hart {} stopped! pc: {:08X}", hart, self.harts[hart].pc);
+                            println!("");
                             Self::print_code_region(&self.machine, self.harts[hart].pc, &symbol_tree);
                             print_prompt = true;
                             true
                         },
                         HartExecutionMode::Faulted => {
-                            print!("\nhart {} hit a fault!\r\n\r\n", hart);
+                            println!("");
+                            println!("hart {} hit a fault!", hart);
+                            println!("");
                             Self::print_code_region(&self.machine, self.harts[hart].pc, &symbol_tree);
                             print_prompt = true;
                             true
                         },
                         HartExecutionMode::HitBreakpoint => {
-                            print!("\nhart {} hit breakpoint!\r\n\r\n", hart);
+                            println!("");
+                            println!("hart {} hit breakpoint!", hart);
+                            println!("");
                             Self::print_code_region(&self.machine, self.harts[hart].pc, &symbol_tree);
                             print_prompt = true;
                             true
                         },
                         HartExecutionMode::WaitingForInterrupt => {
-                            print!("\nhart {} waiting for interrupt...\r\n\r\n", hart);
+                            println!("");
+                            println!("hart {} waiting for interrupt...", hart);
+                            println!("");
                             Self::print_code_region(&self.machine, self.harts[hart].pc, &symbol_tree);
                             print_prompt = true;
                             false
@@ -298,7 +345,7 @@ impl Debugger {
             }
 
             if print_prompt {
-                Self::prompt(&mut stdout);
+                line_stream.prompt();
                 print_prompt = false;
             }
 
@@ -330,7 +377,7 @@ impl Debugger {
                             symbol: None,
                             id
                         });
-                        print!("added breakpoint {} at address {:08X}\r\n", id, addr);
+                        println!("added breakpoint {} at address {:08X}", id, addr);
                     },
                     Some(Command::SetBreakpoint(BreakpointName::Symbol(symbol_name))) => {
                         if let Some(symbol_addr) = symbol_table.get(&symbol_name) {
@@ -341,25 +388,25 @@ impl Debugger {
                                 symbol: Some(symbol_name.clone()),
                                 id
                             });
-                            print!("added breakpoint {} at {} ({:08X})\r\n", id, symbol_name, symbol_addr);
+                            println!("added breakpoint {} at {} ({:08X})", id, symbol_name, symbol_addr);
                         }
                     }
                     Some(Command::ClearBreakpoint(BreakpointName::Id(id))) => {
                         if let Some(index) = self.breakpoints.iter().position(|b| b.id == id) {
-                            print!("removed breakpoint {}\r\n", id);
+                            println!("removed breakpoint {}", id);
                             self.breakpoints.remove(index);
                         }
                     },
                     Some(Command::ClearBreakpoint(BreakpointName::Address(addr))) => {
                         if let Some(index) = self.breakpoints.iter().position(|b| b.address == addr) {
-                            print!("removed breakpoint {}\r\n", self.breakpoints[index].id);
+                            println!("removed breakpoint {}", self.breakpoints[index].id);
                             self.breakpoints.remove(index);
                         }
                     },
                     Some(Command::ClearBreakpoint(BreakpointName::Symbol(symbol_name))) => {
                         if let Some(symbol_addr) = symbol_table.get(&symbol_name) {
                             if let Some(index) = self.breakpoints.iter().position(|b| b.address == *symbol_addr) {
-                                print!("removed breakpoint {}\r\n", self.breakpoints[index].id);
+                                println!("removed breakpoint {}", self.breakpoints[index].id);
                                 self.breakpoints.remove(index);
                             }
                         }
@@ -370,8 +417,8 @@ impl Debugger {
                                 ListType::Breakpoints => {
                                     for breakpoint in self.breakpoints.iter() {
                                         match breakpoint.symbol.as_ref() {
-                                            Some(symbol_name) => print!("{}: {:08X} {}\r\n", breakpoint.id, breakpoint.address, symbol_name),
-                                            None                       => print!("{}: {:08X}\r\n",    breakpoint.id, breakpoint.address),
+                                            Some(symbol_name) => println!("{}: {:08X} {}", breakpoint.id, breakpoint.address, symbol_name),
+                                            None                       => println!("{}: {:08X}",    breakpoint.id, breakpoint.address),
                                         }
                                         
                                     }
@@ -390,10 +437,10 @@ impl Debugger {
                                 (true, HartExecutionMode::Running | HartExecutionMode::WaitingForInterrupt | HartExecutionMode::HitBreakpoint) => {
                                     self.exec_modes[hart] = HartExecutionMode::Stopped;
                                     last_execution_modes[hart] = HartExecutionMode::Stopped;
-                                    print!("hart {} stopped\r\n", hart);
+                                    println!("hart {} stopped", hart);
                                 },
                                 (true, HartExecutionMode::Stopped) => {
-                                    print!("hart {} already stopped\r\n", hart);
+                                    println!("hart {} already stopped", hart);
                                 }
                                 _ => {}
                             }
@@ -416,21 +463,21 @@ impl Debugger {
                     },
                     Some(Command::Hart(hart)) => {
                         if hart != current_hart {
-                            print!("switched to hart {}\r\n", hart);
+                            println!("switched to hart {}", hart);
                             current_hart = hart;
                         } else {
-                            print!("already on hart {}\r\n", hart);
+                            println!("already on hart {}", hart);
                         }
                     },
                     Some(Command::Regs) => {
                         for r in 0..32 {
                             if r & 3 == 3 {
-                                print!("{:<5} {:08X}\r\n", format!("{}:", Rv32Op::register_name(r)), self.harts[current_hart].gprs[r as usize]);
+                                println!("{:<5} {:08X}", format!("{}:", Rv32Op::register_name(r)), self.harts[current_hart].gprs[r as usize]);
                             } else {
                                 print!("{:<5} {:08X}  ", format!("{}:", Rv32Op::register_name(r)), self.harts[current_hart].gprs[r as usize]);
                             }
                         }
-                        print!("pc:   {:08X}\r\n", self.harts[current_hart].pc);
+                        println!("pc:   {:08X}", self.harts[current_hart].pc);
                     },
                     Some(Command::SingleStep) => {
                         match self.exec_modes[current_hart] {
@@ -448,27 +495,27 @@ impl Debugger {
                     Some(Command::Read(DataType::U8, addr)) => {
                         match self.machine.read_u8(addr) {
                             ReadResult::Ok(value) => print!("{:02X}", value),
-                            _ => print!("failed to read from {:08X}\r\n", addr),
+                            _ => println!("failed to read from {:08X}", addr),
                         }
                     },
                     Some(Command::Read(DataType::U16, addr)) => {
                         match self.machine.read_u16(addr) {
                             ReadResult::Ok(value) => print!("{:04X}", value),
-                            _ => print!("failed to read from {:08X}\r\n", addr),
+                            _ => println!("failed to read from {:08X}", addr),
                         }
                     },
                     Some(Command::Read(DataType::U32, addr)) => {
                         match self.machine.read_u32(addr) {
                             ReadResult::Ok(value) => print!("{:08X}", value),
-                            _ => print!("failed to read from {:08X}\r\n", addr),
+                            _ => println!("failed to read from {:08X}", addr),
                         }
                     },
                     Some(other) => {
-                        print!("unimplemented command: {:?}\r\n", other);
+                        println!("unimplemented command: {:?}", other);
                     },
                     None => {
                         if line.len() > 0 {
-                            print!("failed to parse command: {:?}\r\n", line);
+                            println!("failed to parse command: {:?}", line);
                         }
                     }
                 }
@@ -481,79 +528,79 @@ impl Debugger {
         if let Some(topic) = topic {
             match topic.as_str() {
                 "b" | "breakpoints" => {
-                    print!("\r\n");
+                    println!("");
                 },
                 "r" | "running" => {
-                    print!("\r\n")
+                    println!("");
                 },
                 topic => {
-                    print!("unknown help topic: {}\r\n", topic);
+                    println!("unknown help topic: {}", topic);
                 }
             }
         } else {
-            print!("commands:\r\n");
-            print!("    - help (topic)                 : print help information (optionally for a topic)\r\n");
-            print!("          aliases                  : help h\r\n");
-            print!("          help topics              :\r\n");
-            print!("              * b | breakpoints\r\n");
-            print!("              * r | running\r\n");
-            print!("\r\n");
-            print!("    - quit                         : quits rvfm\r\n");
-            print!("          aliases                  : quit q\r\n");
-            print!("\r\n");
-            print!("    - kill                         : kill the machine, stopping execution\r\n");
-            print!("          aliases                  : kill k\r\n");
-            print!("\r\n");
-            print!("    - list [<list name>]           : enumerate members of a list\r\n");
-            print!("          aliases                  : list l\r\n");
-            print!("          lists                    :\r\n");
-            print!("               * breakpoints\r\n");
-            print!("               * symbol\r\n");
-            print!("\r\n");
-            print!("    - continue <hart> ([, <hart>]) : continues the targeted hart(s)\r\n");
-            print!("          aliases                  : continue c\r\n");
-            print!("          harts                    :\r\n");
-            print!("              * 0\r\n");
-            print!("              * 1\r\n");
-            print!("              * 2\r\n");
-            print!("              * 3\r\n");
-            print!("              * all\r\n");
-            print!("\r\n");
-            print!("    - stop <hart> [(, <hart>)]     : stops the targeted hart(s)\r\n");
-            print!("          aliases                  : stop S\r\n");
-            print!("          harts                    :\r\n");
-            print!("              * 0\r\n");
-            print!("              * 1\r\n");
-            print!("              * 2\r\n");
-            print!("              * 3\r\n");
-            print!("              * all\r\n");
-            print!("\r\n");
-            print!("    - hart <hart>                  : stops the targeted hart(s)\r\n");
-            print!("          aliases                  : hart H\r\n");
-            print!("          harts                    :\r\n");
-            print!("              * 0\r\n");
-            print!("              * 1\r\n");
-            print!("              * 2\r\n");
-            print!("              * 3\r\n");
-            print!("\r\n");
-            print!("    - set_bp <breakpoint>          : creates a breakpoint at the address/symbol specified\r\n");
-            print!("          aliases                  : set_bp b\r\n");
-            print!("          breakpoints              :\r\n");
-            print!("              * <symbol name>\r\n");
-            print!("              * @ <hex address>\r\n");
-            print!("\r\n");
-            print!("    - clear_bp <breakpoint>        : creates a breakpoint at the address/symbol specified\r\n");
-            print!("          aliases                  : clear_bp !b\r\n");
-            print!("          breakpoints              :\r\n");
-            print!("              * <symbol name>\r\n");
-            print!("              * @ <hex address>\r\n");
-            print!("              * <breakpoint id>\r\n");
-            print!("\r\n");
-            print!("    - step                         : single-steps the current hart\r\n");
-            print!("          aliases                  : step s\r\n");
-            print!("\r\n");
-            print!("    - regs                         : prints registers for the current hart\r\n");
-            print!("          aliases                  : regs r\r\n");
+            println!("commands:");
+            println!("    - help (topic)                 : print help information (optionally for a topic)");
+            println!("          aliases                  : help h");
+            println!("          help topics              :");
+            println!("              * b | breakpoints");
+            println!("              * r | running");
+            println!("");
+            println!("    - quit                         : quits rvfm");
+            println!("          aliases                  : quit q");
+            println!("");
+            println!("    - kill                         : kill the machine, stopping execution");
+            println!("          aliases                  : kill k");
+            println!("");
+            println!("    - list [<list name>]           : enumerate members of a list");
+            println!("          aliases                  : list l");
+            println!("          lists                    :");
+            println!("               * breakpoints");
+            println!("               * symbol");
+            println!("");
+            println!("    - continue <hart> ([, <hart>]) : continues the targeted hart(s)");
+            println!("          aliases                  : continue c");
+            println!("          harts                    :");
+            println!("              * 0");
+            println!("              * 1");
+            println!("              * 2");
+            println!("              * 3");
+            println!("              * all");
+            println!("");
+            println!("    - stop <hart> [(, <hart>)]     : stops the targeted hart(s)");
+            println!("          aliases                  : stop S");
+            println!("          harts                    :");
+            println!("              * 0");
+            println!("              * 1");
+            println!("              * 2");
+            println!("              * 3");
+            println!("              * all");
+            println!("");
+            println!("    - hart <hart>                  : stops the targeted hart(s)");
+            println!("          aliases                  : hart H");
+            println!("          harts                    :");
+            println!("              * 0");
+            println!("              * 1");
+            println!("              * 2");
+            println!("              * 3");
+            println!("");
+            println!("    - set_bp <breakpoint>          : creates a breakpoint at the address/symbol specified");
+            println!("          aliases                  : set_bp b");
+            println!("          breakpoints              :");
+            println!("              * <symbol name>");
+            println!("              * @ <hex address>");
+            println!("");
+            println!("    - clear_bp <breakpoint>        : creates a breakpoint at the address/symbol specified");
+            println!("          aliases                  : clear_bp !b");
+            println!("          breakpoints              :");
+            println!("              * <symbol name>");
+            println!("              * @ <hex address>");
+            println!("              * <breakpoint id>");
+            println!("");
+            println!("    - step                         : single-steps the current hart");
+            println!("          aliases                  : step s");
+            println!("");
+            println!("    - regs                         : prints registers for the current hart");
+            println!("          aliases                  : regs r");
         }
     }
 }
