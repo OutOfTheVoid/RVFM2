@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
+use std::ops::Rem;
 use std::ptr::read;
-use super::types::PixelDataType;
+use super::types::{PixelDataLayout, PixelDataType};
 use super::buffer::BufferModule;
 use super::texture::TextureModule;
 
@@ -90,6 +91,18 @@ pub enum OpDataType {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TextureLoadType {
+    F32FromINorm,
+    F32FromUNorm,
+    F32FromInt,
+    F32FromUInt,
+    F32FromF32,
+    I32FromInt,
+    I32FromUInt,
+    I32FromF32,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum OpDataTypeConversion {
     F32ToI32,
     F32ToU32,
@@ -101,16 +114,18 @@ pub enum OpDataTypeConversion {
 pub enum ScalarUnaryOp {
     Convert     ( OpDataTypeConversion ),
     Negative    ( OpDataType           ),
-    Reciporocal ( OpDataType           ),
     Sign        ( OpDataType           ),
 
     // F32 only
-    Sin  ,
-    Cos  ,
-    Tan  ,
-    Atan ,
-    Log  ,
-    Exp  ,
+    Reciporocal,
+    Sin        ,
+    Cos        ,
+    Tan        ,
+    ASin       ,
+    ACos       ,
+    Atan       ,
+    Ln         ,
+    Exp        ,
 
 }
 
@@ -121,13 +136,14 @@ pub enum ScalarBinaryOp {
     Multiply ( OpDataType ),
     Divide   ( OpDataType ),
     Modulo   ( OpDataType ),
-    Atan2    ( OpDataType ),
+    // F32 only
+    Atan2,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ScalarTernaryOp {
-    Fma      ( OpDataType ),
-    Lerp     ( OpDataType ),
+    Fma  ( OpDataType ),
+    Lerp               ,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -210,12 +226,14 @@ pub enum ShaderInstruction {
     LoadTextureVector {
         src_xy_u32: RegisterAddress<Vector>,
         dst: RegisterAddress<Vector>,
+        load_type: TextureLoadType,
         texture: u8,
     },
     LoadTextureScalar {
         src_xy_u32: RegisterAddress<Vector>,
         channel: VectorChannel,
         dst: RegisterAddress<Scalar>,
+        load_type: TextureLoadType,
         texture: u8,
     },
     ScalarUnaryOp {
@@ -337,14 +355,14 @@ impl<T> RegisterReadPtr<T> {
 }
 
 impl ShadingUnitContext {
-    pub fn run_instruction<'i, 'o, 'rc>(&mut self, instruction: &ShaderInstruction, run_context: &'rc mut ShadingUnitRunContext<'i, 'o>, buffer_modules: &mut [BufferModule; 256], texture_modules: &mut [TextureModule; 64]) -> Option<()> {
+    pub fn run_instruction<'i, 'o, 'rc>(&mut self, n: usize, instruction: &ShaderInstruction, run_context: &'rc mut ShadingUnitRunContext<'i, 'o>, buffer_modules: &mut [BufferModule; 256], texture_modules: &mut [TextureModule; 64]) -> Option<()> {
         match instruction {
             ShaderInstruction::PushVector(register) => {
                 let source_register = self.read_vector_register(*register, run_context);
                 let stack_slot = &mut self.vector_stack_array[self.vector_stack_size];
                 match source_register {
-                    RegisterRead::Core(register_list) => stack_slot.copy_from_slice(register_list),
-                    RegisterRead::Uniform(register) => stack_slot.fill(*register),
+                    RegisterRead::Core(register_list) => stack_slot[0..n].copy_from_slice(&register_list[0..n]),
+                    RegisterRead::Uniform(register) => stack_slot[0..n].fill(*register),
                 }
                 self.vector_stack_size += 1;
             },
@@ -352,8 +370,8 @@ impl ShadingUnitContext {
                 let source_register = self.read_scalar_register(*register, run_context);
                 let stack_slot = &mut self.scalar_stack_array[self.vector_stack_size];
                 match source_register {
-                    RegisterRead::Core(register_list) => stack_slot.copy_from_slice(register_list),
-                    RegisterRead::Uniform(register) => stack_slot.fill(*register),
+                    RegisterRead::Core(register_list) => stack_slot[0..n].copy_from_slice(&register_list[0..n]),
+                    RegisterRead::Uniform(register) => stack_slot[0..n].fill(*register),
                 }
                 self.scalar_stack_size += 1;
             },
@@ -361,21 +379,21 @@ impl ShadingUnitContext {
                 let register_list = self.write_vector_register(*register, run_context)?;
                 self.vector_stack_size -= 1;
                 let stack_slot = &self.vector_stack_array[self.vector_stack_size];
-                register_list.copy_from_slice(stack_slot);
+                register_list[0..n].copy_from_slice(&stack_slot[0..n]);
             },
             ShaderInstruction::PopScalar(register) => {
                 let register_list = self.write_scalar_register(*register, run_context)?;
                 self.scalar_stack_size -= 1;
                 let stack_slot = &self.scalar_stack_array[self.scalar_stack_size];
-                register_list.copy_from_slice(stack_slot);
+                register_list[0..n].copy_from_slice(&stack_slot[0..n]);
             },
             ShaderInstruction::CopyVectorRegister { from, to } => {
                 if *from == *to { None? }
                 let from_register = self.read_vector_register(*from, run_context);
                 let to_register_list = self.write_vector_register(*to, run_context)?;
                 match from_register {
-                    RegisterRead::Core(register_list) => todo!(),
-                    RegisterRead::Uniform(register) => todo!(),
+                    RegisterRead::Core(from_register_list) => to_register_list[0..n].copy_from_slice(&from_register_list[0..n]),
+                    RegisterRead::Uniform(from_register) => to_register_list[0..n].fill(*from_register),
                 }
             },
             ShaderInstruction::CopyScalarRegister { from, to } => {
@@ -383,8 +401,8 @@ impl ShadingUnitContext {
                 let from_register = self.read_scalar_register(*from, run_context);
                 let to_register_list = self.write_scalar_register(*to, run_context)?;
                 match from_register {
-                    RegisterRead::Core(register_list) => todo!(),
-                    RegisterRead::Uniform(register) => todo!(),
+                    RegisterRead::Core(from_register_list) => to_register_list[0..n].copy_from_slice(&from_register_list[0..n]),
+                    RegisterRead::Uniform(from_register) => to_register_list[0..n].fill(*from_register),
                 }
             },
             ShaderInstruction::CopyVectorComponentToScalar { channel, from, to } => {
@@ -392,10 +410,10 @@ impl ShadingUnitContext {
                 let to_register_list = self.write_scalar_register(*to, run_context)?;
                 match from_register {
                     RegisterRead::Core(from_register_list) =>
-                        (0..CORE_COUNT)
+                        (0..n)
                             .for_each(|i| to_register_list[i] = from_register_list[i][*channel as usize]),
                     RegisterRead::Uniform(from_register) =>
-                        (0..CORE_COUNT)
+                        (0..n)
                             .for_each(|i| to_register_list[i] = from_register[*channel as usize]),
                 }
             },
@@ -404,10 +422,10 @@ impl ShadingUnitContext {
                 let to_register_list = self.write_vector_register(*to, run_context)?;
                 match from_register {
                     RegisterRead::Core(from_register_list) =>
-                        (0..CORE_COUNT)
+                        (0..n)
                             .for_each(|i| to_register_list[i][*channel as usize] = from_register_list[i]),
                     RegisterRead::Uniform(from_register) =>
-                        (0..CORE_COUNT)
+                        (0..n)
                             .for_each(|i| to_register_list[i][*channel as usize] = *from_register),
                 }
             },
@@ -417,17 +435,19 @@ impl ShadingUnitContext {
                 match from_register {
                     RegisterRead::Core(from_register_list) =>
                         (0..4).for_each(|c| {
-                            (0..CORE_COUNT).for_each(|i| {
-                                if (mask & (1 << c)) != 0 {
+                            if (mask & (1 << c)) != 0 {
+                                (0..n).for_each(|i| {
                                     to_register_list[i][c] = from_register_list[i];
-                                }
-                            })
+                                })
+                            }
                         }),
                     RegisterRead::Uniform(from_register) =>
                         (0..4).for_each(|c| {
-                            (0..CORE_COUNT).for_each(|i| {
-                                to_register_list[i][c] = *from_register;
-                            })
+                            if (mask & (1 << c)) != 0 {
+                                (0..n).for_each(|i| {
+                                    to_register_list[i][c] = *from_register;
+                                })
+                            }
                         }),
                 }
             },
@@ -525,132 +545,155 @@ impl ShadingUnitContext {
                     Some(src_register_addr) => {
                         match self.read_scalar_register(*src_register_addr, run_context) {
                             RegisterRead::Core(addr_register_list) => {
-                                (0..CORE_COUNT).for_each(|i| {
+                                (0..n).for_each(|i| {
                                     vector_register[i] = read_fn(buffer_bytes, *offset as usize + addr_register_list[i] as usize);
                                 })
                             },
                             RegisterRead::Uniform(addr_register) => {
                                 let value = read_fn(buffer_bytes, *offset as usize + *addr_register as usize);
-                                vector_register.fill(value);
+                                vector_register[0..n].fill(value);
                             }
                         }
                     },
                     None => {
                         let value = read_fn(buffer_bytes, *offset as usize);
-                        vector_register.fill(value);
+                        vector_register[0..n].fill(value);
                     }
                 }
             },
             ShaderInstruction::WriteVectorToBuffer{ data_type, src, offset, addr_src_u32, buffer } => {
                 let buffer = &mut buffer_modules[*buffer as usize];
                 let bytes = buffer.bytes_mut();
-                let vector_register = self.read_vector_register(*src, run_context);
+                let from_register = self.read_vector_register(*src, run_context);
                 let write_fn = match *data_type {
-                    VectorBufferWriteType::Scalar(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8 (&[vector[0] as  i8 as  u8], bytes, *offset as usize),
-                    VectorBufferWriteType::Scalar(BufferWriteType::I16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[vector[0] as i16 as u16], bytes, *offset as usize),
-                    VectorBufferWriteType::Scalar(BufferWriteType::I32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[vector[0] as i32 as u32], bytes, *offset as usize),
-                    VectorBufferWriteType::Scalar(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8 (&[vector[0] as  u8], bytes, *offset as usize),
-                    VectorBufferWriteType::Scalar(BufferWriteType::U16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[vector[0] as u16], bytes, *offset as usize),
+                    VectorBufferWriteType::Scalar(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8 (&[vector[0] as  i8 as  u8], bytes, offset),
+                    VectorBufferWriteType::Scalar(BufferWriteType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[vector[0] as i16 as u16], bytes, offset),
+                    VectorBufferWriteType::Scalar(BufferWriteType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[vector[0] as i32 as u32], bytes, offset),
+                    VectorBufferWriteType::Scalar(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8 (&[vector[0] as  u8], bytes, offset),
+                    VectorBufferWriteType::Scalar(BufferWriteType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[vector[0] as u16], bytes, offset),
                     VectorBufferWriteType::Scalar(BufferWriteType::U32) |
-                    VectorBufferWriteType::Scalar(BufferWriteType::F32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[vector[0]], bytes, *offset as usize),
-                    VectorBufferWriteType::Scalar(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0])], bytes, *offset as usize),
-                    VectorBufferWriteType::Scalar(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0])], bytes, *offset as usize),
-                    VectorBufferWriteType::Scalar(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0])], bytes, *offset as usize),
-                    VectorBufferWriteType::Scalar(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0])], bytes, *offset as usize),
-                    VectorBufferWriteType::Scalar(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0])], bytes, *offset as usize),
-                    VectorBufferWriteType::Scalar(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0])], bytes, *offset as usize),
+                    VectorBufferWriteType::Scalar(BufferWriteType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[vector[0]], bytes, offset),
+                    VectorBufferWriteType::Scalar(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0])], bytes, offset),
+                    VectorBufferWriteType::Scalar(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0])], bytes, offset),
+                    VectorBufferWriteType::Scalar(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0])], bytes, offset),
+                    VectorBufferWriteType::Scalar(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0])], bytes, offset),
+                    VectorBufferWriteType::Scalar(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0])], bytes, offset),
+                    VectorBufferWriteType::Scalar(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0])], bytes, offset),
                     
-                    VectorBufferWriteType::V2(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8 (&[vector[0] as  i8 as  u8, vector[1] as  i8 as  u8], bytes, *offset as usize),
-                    VectorBufferWriteType::V2(BufferWriteType::I16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[vector[0] as i16 as u16, vector[1] as i16 as u16], bytes, *offset as usize),
-                    VectorBufferWriteType::V2(BufferWriteType::I32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[vector[0] as i32 as u32, vector[1] as i32 as u32], bytes, *offset as usize),
-                    VectorBufferWriteType::V2(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8 (&[vector[0] as  u8, vector[1] as  u8], bytes, *offset as usize),
-                    VectorBufferWriteType::V2(BufferWriteType::U16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[vector[0] as u16, vector[1] as u16], bytes, *offset as usize),
+                    VectorBufferWriteType::V2(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8 (&[vector[0] as  i8 as  u8, vector[1] as  i8 as  u8], bytes, offset),
+                    VectorBufferWriteType::V2(BufferWriteType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[vector[0] as i16 as u16, vector[1] as i16 as u16], bytes, offset),
+                    VectorBufferWriteType::V2(BufferWriteType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[vector[0] as i32 as u32, vector[1] as i32 as u32], bytes, offset),
+                    VectorBufferWriteType::V2(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8 (&[vector[0] as  u8, vector[1] as  u8], bytes, offset),
+                    VectorBufferWriteType::V2(BufferWriteType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[vector[0] as u16, vector[1] as u16], bytes, offset),
                     VectorBufferWriteType::V2(BufferWriteType::U32) |
-                    VectorBufferWriteType::V2(BufferWriteType::F32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[vector[0], vector[1]], bytes, *offset as usize),
-                    VectorBufferWriteType::V2(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0]), f32_bits_to_inorm8_bits(vector[1])], bytes, *offset as usize),
-                    VectorBufferWriteType::V2(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0]), f32_bits_to_inorm16_bits(vector[1])], bytes, *offset as usize),
-                    VectorBufferWriteType::V2(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0]), f32_bits_to_inorm32_bits(vector[1])], bytes, *offset as usize),
-                    VectorBufferWriteType::V2(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0]), f32_bits_to_unorm8_bits(vector[1])], bytes, *offset as usize),
-                    VectorBufferWriteType::V2(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0]), f32_bits_to_unorm16_bits(vector[1])], bytes, *offset as usize),
-                    VectorBufferWriteType::V2(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0]), f32_bits_to_unorm32_bits(vector[1])], bytes, *offset as usize),
+                    VectorBufferWriteType::V2(BufferWriteType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[vector[0], vector[1]], bytes, offset),
+                    VectorBufferWriteType::V2(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0]), f32_bits_to_inorm8_bits(vector[1])], bytes, offset),
+                    VectorBufferWriteType::V2(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0]), f32_bits_to_inorm16_bits(vector[1])], bytes, offset),
+                    VectorBufferWriteType::V2(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0]), f32_bits_to_inorm32_bits(vector[1])], bytes, offset),
+                    VectorBufferWriteType::V2(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0]), f32_bits_to_unorm8_bits(vector[1])], bytes, offset),
+                    VectorBufferWriteType::V2(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0]), f32_bits_to_unorm16_bits(vector[1])], bytes, offset),
+                    VectorBufferWriteType::V2(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0]), f32_bits_to_unorm32_bits(vector[1])], bytes, offset),
 
-                    VectorBufferWriteType::V3(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8 (&[vector[0] as  i8 as  u8, vector[1] as  i8 as  u8, vector[2] as  i8 as  u8], bytes, *offset as usize),
-                    VectorBufferWriteType::V3(BufferWriteType::I16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[vector[0] as i16 as u16, vector[1] as i16 as u16, vector[2] as i16 as u16], bytes, *offset as usize),
-                    VectorBufferWriteType::V3(BufferWriteType::I32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[vector[0] as i32 as u32, vector[1] as i32 as u32, vector[2] as i32 as u32], bytes, *offset as usize),
-                    VectorBufferWriteType::V3(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8 (&[vector[0] as  u8, vector[1] as  u8, vector[2] as  u8], bytes, *offset as usize),
-                    VectorBufferWriteType::V3(BufferWriteType::U16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[vector[0] as u16, vector[1] as u16, vector[2] as u16], bytes, *offset as usize),
+                    VectorBufferWriteType::V3(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8 (&[vector[0] as  i8 as  u8, vector[1] as  i8 as  u8, vector[2] as  i8 as  u8], bytes, offset),
+                    VectorBufferWriteType::V3(BufferWriteType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[vector[0] as i16 as u16, vector[1] as i16 as u16, vector[2] as i16 as u16], bytes, offset),
+                    VectorBufferWriteType::V3(BufferWriteType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[vector[0] as i32 as u32, vector[1] as i32 as u32, vector[2] as i32 as u32], bytes, offset),
+                    VectorBufferWriteType::V3(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8 (&[vector[0] as  u8, vector[1] as  u8, vector[2] as  u8], bytes, offset),
+                    VectorBufferWriteType::V3(BufferWriteType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[vector[0] as u16, vector[1] as u16, vector[2] as u16], bytes, offset),
                     VectorBufferWriteType::V3(BufferWriteType::U32) |
-                    VectorBufferWriteType::V3(BufferWriteType::F32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[vector[0], vector[1], vector[2]], bytes, *offset as usize),
-                    VectorBufferWriteType::V3(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0]), f32_bits_to_inorm8_bits(vector[1]), f32_bits_to_inorm8_bits(vector[2])], bytes, *offset as usize),
-                    VectorBufferWriteType::V3(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0]), f32_bits_to_inorm16_bits(vector[1]), f32_bits_to_inorm16_bits(vector[2])], bytes, *offset as usize),
-                    VectorBufferWriteType::V3(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0]), f32_bits_to_inorm32_bits(vector[1]), f32_bits_to_inorm32_bits(vector[2])], bytes, *offset as usize),
-                    VectorBufferWriteType::V3(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0]), f32_bits_to_unorm8_bits(vector[1]), f32_bits_to_unorm8_bits(vector[2])], bytes, *offset as usize),
-                    VectorBufferWriteType::V3(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0]), f32_bits_to_unorm16_bits(vector[1]), f32_bits_to_unorm16_bits(vector[2])], bytes, *offset as usize),
-                    VectorBufferWriteType::V3(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0]), f32_bits_to_unorm32_bits(vector[1]), f32_bits_to_unorm32_bits(vector[2])], bytes, *offset as usize),
+                    VectorBufferWriteType::V3(BufferWriteType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[vector[0], vector[1], vector[2]], bytes, offset),
+                    VectorBufferWriteType::V3(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0]), f32_bits_to_inorm8_bits(vector[1]), f32_bits_to_inorm8_bits(vector[2])], bytes, offset),
+                    VectorBufferWriteType::V3(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0]), f32_bits_to_inorm16_bits(vector[1]), f32_bits_to_inorm16_bits(vector[2])], bytes, offset),
+                    VectorBufferWriteType::V3(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0]), f32_bits_to_inorm32_bits(vector[1]), f32_bits_to_inorm32_bits(vector[2])], bytes, offset),
+                    VectorBufferWriteType::V3(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0]), f32_bits_to_unorm8_bits(vector[1]), f32_bits_to_unorm8_bits(vector[2])], bytes, offset),
+                    VectorBufferWriteType::V3(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0]), f32_bits_to_unorm16_bits(vector[1]), f32_bits_to_unorm16_bits(vector[2])], bytes, offset),
+                    VectorBufferWriteType::V3(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0]), f32_bits_to_unorm32_bits(vector[1]), f32_bits_to_unorm32_bits(vector[2])], bytes, offset),
 
-                    VectorBufferWriteType::V4(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8 (&[vector[0] as  i8 as  u8, vector[1] as  i8 as  u8, vector[2] as  i8 as  u8, vector[3] as  i8 as  u8], bytes, *offset as usize),
-                    VectorBufferWriteType::V4(BufferWriteType::I16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[vector[0] as i16 as u16, vector[1] as i16 as u16, vector[2] as i16 as u16, vector[3] as i16 as u16], bytes, *offset as usize),
-                    VectorBufferWriteType::V4(BufferWriteType::I32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[vector[0] as i32 as u32, vector[1] as i32 as u32, vector[2] as i32 as u32, vector[3] as i32 as u32], bytes, *offset as usize),
-                    VectorBufferWriteType::V4(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8 (&[vector[0] as  u8, vector[1] as  u8, vector[2] as  u8, vector[3] as  u8], bytes, *offset as usize),
-                    VectorBufferWriteType::V4(BufferWriteType::U16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[vector[0] as u16, vector[1] as u16, vector[2] as u16, vector[3] as u16], bytes, *offset as usize),
+                    VectorBufferWriteType::V4(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8 (&[vector[0] as  i8 as  u8, vector[1] as  i8 as  u8, vector[2] as  i8 as  u8, vector[3] as  i8 as  u8], bytes, offset),
+                    VectorBufferWriteType::V4(BufferWriteType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[vector[0] as i16 as u16, vector[1] as i16 as u16, vector[2] as i16 as u16, vector[3] as i16 as u16], bytes, offset),
+                    VectorBufferWriteType::V4(BufferWriteType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[vector[0] as i32 as u32, vector[1] as i32 as u32, vector[2] as i32 as u32, vector[3] as i32 as u32], bytes, offset),
+                    VectorBufferWriteType::V4(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8 (&[vector[0] as  u8, vector[1] as  u8, vector[2] as  u8, vector[3] as  u8], bytes, offset),
+                    VectorBufferWriteType::V4(BufferWriteType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[vector[0] as u16, vector[1] as u16, vector[2] as u16, vector[3] as u16], bytes, offset),
                     VectorBufferWriteType::V4(BufferWriteType::U32) |
-                    VectorBufferWriteType::V4(BufferWriteType::F32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[vector[0], vector[1], vector[2], vector[3]], bytes, *offset as usize),
-                    VectorBufferWriteType::V4(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0]), f32_bits_to_inorm8_bits(vector[1]), f32_bits_to_inorm8_bits(vector[2]), f32_bits_to_inorm8_bits(vector[3])], bytes, *offset as usize),
-                    VectorBufferWriteType::V4(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0]), f32_bits_to_inorm16_bits(vector[1]), f32_bits_to_inorm16_bits(vector[2]), f32_bits_to_inorm16_bits(vector[3])], bytes, *offset as usize),
-                    VectorBufferWriteType::V4(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0]), f32_bits_to_inorm32_bits(vector[1]), f32_bits_to_inorm32_bits(vector[2]), f32_bits_to_inorm32_bits(vector[3])], bytes, *offset as usize),
-                    VectorBufferWriteType::V4(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0]), f32_bits_to_unorm8_bits(vector[1]), f32_bits_to_unorm8_bits(vector[2]), f32_bits_to_unorm8_bits(vector[3])], bytes, *offset as usize),
-                    VectorBufferWriteType::V4(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0]), f32_bits_to_unorm16_bits(vector[1]), f32_bits_to_unorm16_bits(vector[2]), f32_bits_to_unorm16_bits(vector[3])], bytes, *offset as usize),
-                    VectorBufferWriteType::V4(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: &u32, vector: [u32; 4]|
-                        write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0]), f32_bits_to_unorm32_bits(vector[1]), f32_bits_to_unorm32_bits(vector[2]), f32_bits_to_unorm32_bits(vector[3])], bytes, *offset as usize),
+                    VectorBufferWriteType::V4(BufferWriteType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[vector[0], vector[1], vector[2], vector[3]], bytes, offset),
+                    VectorBufferWriteType::V4(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0]), f32_bits_to_inorm8_bits(vector[1]), f32_bits_to_inorm8_bits(vector[2]), f32_bits_to_inorm8_bits(vector[3])], bytes, offset),
+                    VectorBufferWriteType::V4(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0]), f32_bits_to_inorm16_bits(vector[1]), f32_bits_to_inorm16_bits(vector[2]), f32_bits_to_inorm16_bits(vector[3])], bytes, offset),
+                    VectorBufferWriteType::V4(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0]), f32_bits_to_inorm32_bits(vector[1]), f32_bits_to_inorm32_bits(vector[2]), f32_bits_to_inorm32_bits(vector[3])], bytes, offset),
+                    VectorBufferWriteType::V4(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0]), f32_bits_to_unorm8_bits(vector[1]), f32_bits_to_unorm8_bits(vector[2]), f32_bits_to_unorm8_bits(vector[3])], bytes, offset),
+                    VectorBufferWriteType::V4(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0]), f32_bits_to_unorm16_bits(vector[1]), f32_bits_to_unorm16_bits(vector[2]), f32_bits_to_unorm16_bits(vector[3])], bytes, offset),
+                    VectorBufferWriteType::V4(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                        write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0]), f32_bits_to_unorm32_bits(vector[1]), f32_bits_to_unorm32_bits(vector[2]), f32_bits_to_unorm32_bits(vector[3])], bytes, offset),
                 };
-                todo!()
+                match addr_src_u32 {
+                    Some(src_register_addr) => {
+                        match self.read_scalar_register(*src_register_addr, run_context) {
+                            RegisterRead::Core(addr_register_list) => {
+                                match from_register {
+                                    RegisterRead::Core(from_register_list) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + addr_register_list[i] as usize, from_register_list[i])),
+                                    RegisterRead::Uniform(from_register) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + addr_register_list[i] as usize, *from_register)),
+                                }
+                            },
+                            RegisterRead::Uniform(addr_register) => {
+                                match from_register {
+                                    RegisterRead::Core(from_register_list) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + *addr_register as usize, from_register_list[i])),
+                                    RegisterRead::Uniform(from_register) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + *addr_register as usize, *from_register)),
+                                }
+                            }
+                        }
+                    },
+                    None => {
+                        match from_register {
+                            RegisterRead::Core(from_register_list) => (0..n).for_each(|i| write_fn(bytes, *offset as usize, from_register_list[i])),
+                            RegisterRead::Uniform(from_register) => (0..n).for_each(|i| write_fn(bytes, *offset as usize, *from_register)),
+                        }
+                    }
+                }
             },
             ShaderInstruction::ReadBufferToScalar { data_type, scalar, offset, addr_src_u32, buffer } => {
                 let buffer = &buffer_modules[*buffer as usize];
@@ -665,39 +708,773 @@ impl ShadingUnitContext {
                     Some(src_register_addr) => {
                         match self.read_scalar_register(*src_register_addr, run_context) {
                             RegisterRead::Core(addr_register_list) => {
-                                (0..CORE_COUNT).for_each(|i| {
+                                (0..n).for_each(|i| {
                                     scalar_register[i] = read_fn(bytes, *offset as usize + addr_register_list[i] as usize);
                                 })
                             },
                             RegisterRead::Uniform(addr_register) => {
                                 let value = read_fn(bytes, *offset as usize + *addr_register as usize);
-                                scalar_register.fill(value);
+                                scalar_register[0..n].fill(value);
                             }
                         }
                     },
                     None => {
                         let value = read_fn(bytes, *offset as usize);
-                        scalar_register.fill(value);
+                        scalar_register[0..n].fill(value);
                     }
                 }
             },
             ShaderInstruction::WriteScalarToBuffer { data_type, scalar, offset, addr_dst_u32, buffer } => {
                 let buffer = &mut buffer_modules[*buffer as usize];
                 let bytes = buffer.bytes_mut();
+                let from_register = self.read_scalar_register(*scalar, run_context);
+                let write_fn = match *data_type {
+                    BufferWriteType::I8      => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[scalar as i32 as  i8 as  u8], bytes, offset),
+                    BufferWriteType::I16     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[scalar as i32 as i16 as u16], bytes, offset),
+                    BufferWriteType::I32     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[scalar as i32 as i32 as u32], bytes, offset),
+                    BufferWriteType::U8      => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[scalar as  u8], bytes, offset),
+                    BufferWriteType::U16     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[scalar as u16], bytes, offset),
+                    BufferWriteType::U32 |
+                    BufferWriteType::F32     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[scalar], bytes, offset),
+                    BufferWriteType::INorm8  => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[f32_bits_to_inorm8_bits (scalar)], bytes, offset),
+                    BufferWriteType::INorm16 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[f32_bits_to_inorm16_bits(scalar)], bytes, offset),
+                    BufferWriteType::INorm32 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[f32_bits_to_inorm32_bits(scalar)], bytes, offset),
+                    BufferWriteType::UNorm8  => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[f32_bits_to_unorm8_bits (scalar)], bytes, offset),
+                    BufferWriteType::UNorm16 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[f32_bits_to_unorm16_bits(scalar)], bytes, offset),
+                    BufferWriteType::UNorm32 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[f32_bits_to_unorm32_bits(scalar)], bytes, offset),   
+                };
+                match addr_dst_u32 {
+                    Some(src_register_addr) => {
+                        match self.read_scalar_register(*src_register_addr, run_context) {
+                            RegisterRead::Core(addr_register_list) => {
+                                match from_register {
+                                    RegisterRead::Core(from_register_list) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + addr_register_list[i] as usize, from_register_list[i])),
+                                    RegisterRead::Uniform(from_register) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + addr_register_list[i] as usize, *from_register)),
+                                }
+                            },
+                            RegisterRead::Uniform(addr_register) => {
+                                match from_register {
+                                    RegisterRead::Core(from_register_list) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + *addr_register as usize, from_register_list[i])),
+                                    RegisterRead::Uniform(from_register) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + *addr_register as usize, *from_register)),
+                                }
+                            }
+                        }
+                    },
+                    None => {
+                        match from_register {
+                            RegisterRead::Core(from_register_list) => (0..n).for_each(|i| write_fn(bytes, *offset as usize, from_register_list[i])),
+                            RegisterRead::Uniform(from_register) => (0..n).for_each(|i| write_fn(bytes, *offset as usize, *from_register)),
+                        }
+                    }
+                }
+            },
+            ShaderInstruction::LoadTextureVector { src_xy_u32, load_type, dst, texture } => {
+                let texture = &texture_modules[*texture as usize];
+                let pixel_layout = texture.config.pixel_layout;
+                let width = texture.config.width;
+                let coord_register = self.read_vector_register(*src_xy_u32, run_context);
+                let vector_register = self.write_vector_register(*dst, run_context)?;
+                let texture_load_op = match (*load_type, pixel_layout) {
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D32x1)  |
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D32x1)  |
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u32>(u, v);
+                        [x, 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D32x2)  |
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D32x2)  |
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u32; 2]>(u, v);
+                        [x, y, 0, 0]
+                    },
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D32x4)  |
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D32x4)  |
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule| texture.fetch::<[u32; 4]>(u, v),
+                    (TextureLoadType::F32FromF32,  _                     ) => |_u: u32, _v: u32, _texture: &TextureModule| [0, 0, 0, 0],
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u16>(u, v);
+                        [x as u32, 0, 0, 0]
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u16; 2]>(u, v);
+                        [x as u32, y as u32, 0, 0]
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        data.map(|x| x as u32)
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u8>(u, v);
+                        [x as u32, 0, 0, 0]
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u8; 2]>(u, v);
+                        [x as u32, y as u32, 0, 0]
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        data.map(|x| x as u32)
+                    },
+                    (TextureLoadType::I32FromInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u16>(u, v);
+                        [x as i16 as i32 as u32, 0, 0, 0]
+                    },
+                    (TextureLoadType::I32FromInt, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u16; 2]>(u, v);
+                        [x as i16 as i32 as u32, y as i16 as i32 as u32, 0, 0]
+                    },
+                    (TextureLoadType::I32FromInt, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        data.map(|x| x as i16 as i32 as u32)
+                    },
+                    (TextureLoadType::I32FromInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u8>(u, v);
+                        [x as i8 as i32 as u32, 0, 0, 0]
+                    },
+                    (TextureLoadType::I32FromInt, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u8; 2]>(u, v);
+                        [x as i8 as i32 as u32, y as i8 as i32 as u32, 0, 0]
+                    },
+                    (TextureLoadType::I32FromInt, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        data.map(|x| x as i8 as i32 as u32)
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u32>(u, v);
+                        [(x as i32 as f32 / std::i32::MAX as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u32; 2]>(u, v);
+                        [(x as i32 as f32 / std::i32::MAX as f32).to_bits(), (y as i32 as f32 / std::i32::MAX as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u32; 4]>(u, v);
+                        data.map(|x| (x as i32 as f32 / std::i32::MAX as f32).to_bits())
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u16>(u, v);
+                        [(x as i16 as f32 / std::i16::MAX as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u16; 2]>(u, v);
+                        [(x as i16 as f32 / std::i16::MAX as f32).to_bits(), (y as i16 as f32 / std::i16::MAX as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        data.map(|x| (x as i16 as f32 / std::i16::MAX as f32).to_bits())
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u8>(u, v);
+                        [(x as i8 as f32 / std::i8::MAX as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u8; 2]>(u, v);
+                        [(x as i8 as f32 / std::i8::MAX as f32).to_bits(), (y as i8 as f32 / std::i32::MAX as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        data.map(|x| (x as i8 as f32 / std::i8::MAX as f32).to_bits())
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u32>(u, v);
+                        [(x as u32 as f32 / std::u32::MAX as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u32; 2]>(u, v);
+                        [(x as u32 as f32 / std::u32::MAX as f32).to_bits(), (y as u32 as f32 / std::u32::MAX as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u32; 4]>(u, v);
+                        data.map(|x| (x as u32 as f32 / std::u32::MAX as f32).to_bits())
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u16>(u, v);
+                        [(x as u16 as f32 / std::u16::MAX as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u16; 2]>(u, v);
+                        [(x as u16 as f32 / std::u16::MAX as f32).to_bits(), (y as u16 as f32 / std::u16::MAX as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        data.map(|x| (x as u16 as f32 / std::u16::MAX as f32).to_bits())
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u8>(u, v);
+                        [(x as u8 as f32 / std::u8::MAX as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u8; 2]>(u, v);
+                        [(x as u8 as f32 / std::u8::MAX as f32).to_bits(), (y as u8 as f32 / std::u32::MAX as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        data.map(|x| (x as u8 as f32 / std::u8::MAX as f32).to_bits())
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u32>(u, v);
+                        [(x as i32 as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u32; 2]>(u, v);
+                        [(x as i32 as f32).to_bits(), (y as i32 as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u32; 4]>(u, v);
+                        data.map(|x| (x as i32 as f32).to_bits())
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u16>(u, v);
+                        [(x as i16 as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u16; 2]>(u, v);
+                        [(x as i16 as f32).to_bits(), (y as i32 as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        data.map(|x| (x as i16 as f32).to_bits())
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u8>(u, v);
+                        [(x as i8 as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u8; 2]>(u, v);
+                        [(x as i8 as f32).to_bits(), (y as i32 as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        data.map(|x| (x as i8 as f32).to_bits())
+                    },
+
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<u32>(u, v);
+                        [(data as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u32; 2]>(u, v);
+                        [(x as f32).to_bits(), (y as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u32; 4]>(u, v);
+                        data.map(|x| (x as f32).to_bits())
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<u16>(u, v);
+                        [(data as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u16; 2]>(u, v);
+                        [(x as f32).to_bits(), (y as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        data.map(|x| (x as f32).to_bits())
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<u8>(u, v);
+                        [(data as f32).to_bits(), 0, 0, 0]
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u8; 2]>(u, v);
+                        [(x as f32).to_bits(), (y as f32).to_bits(), 0, 0]
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        data.map(|x| (x as f32).to_bits())
+                    },
+                    (TextureLoadType::I32FromF32, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule| {
+                        let x = texture.fetch::<u32>(u, v);
+                        [f32::from_bits(x) as i32 as u32, 0, 0, 0]
+                    },
+                    (TextureLoadType::I32FromF32, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule| {
+                        let [x, y] = texture.fetch::<[u32; 2]>(u, v);
+                        [f32::from_bits(x) as i32 as u32, f32::from_bits(y) as i32 as u32, 0, 0]
+                    },
+                    (TextureLoadType::I32FromF32, PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule| {
+                        let data = texture.fetch::<[u32; 4]>(u, v);
+                        data.map(|x| f32::from_bits(x) as i32 as u32)
+                    },
+                    (TextureLoadType::I32FromF32, _) => |u: u32, v: u32, texture: &TextureModule| [0, 0, 0, 0],
+                };
+                match coord_register {
+                    RegisterRead::Core(coord_register_list) => (0..n).for_each(|i| {
+                        let [x, y, ..] = coord_register_list[i];
+                        vector_register[i] = texture_load_op(x, y, texture);
+                    }),
+                    RegisterRead::Uniform(coord_register) => {
+                        let [x, y, ..] = *coord_register;
+                        let value = texture_load_op(x, y, texture);
+                        vector_register[0..n].fill(value);
+                    },
+                }
+            },
+            ShaderInstruction::LoadTextureScalar { src_xy_u32, load_type, channel, dst, texture } => {
+                let texture = &texture_modules[*texture as usize];
+                let pixel_layout = texture.config.pixel_layout;
+                let scalar_register = self.write_scalar_register(*dst, run_context)?;
+                let coord_register = self.read_vector_register(*src_xy_u32, run_context);
+                match (pixel_layout, channel) {
+                    (PixelDataLayout::D8x1,  VectorChannel::Y) |
+                    (PixelDataLayout::D8x1,  VectorChannel::Z) |
+                    (PixelDataLayout::D8x1,  VectorChannel::W) |
+                    (PixelDataLayout::D16x1, VectorChannel::Y) |
+                    (PixelDataLayout::D16x1, VectorChannel::Z) |
+                    (PixelDataLayout::D16x1, VectorChannel::W) |
+                    (PixelDataLayout::D32x1, VectorChannel::Y) |
+                    (PixelDataLayout::D32x1, VectorChannel::Z) |
+                    (PixelDataLayout::D32x1, VectorChannel::W) |
+                    (PixelDataLayout::D8x2,  VectorChannel::Z) |
+                    (PixelDataLayout::D8x2,  VectorChannel::W) |
+                    (PixelDataLayout::D16x2, VectorChannel::Z) |
+                    (PixelDataLayout::D16x2, VectorChannel::W) |
+                    (PixelDataLayout::D32x2, VectorChannel::Z) |
+                    (PixelDataLayout::D32x2, VectorChannel::W) => None?,
+                    _ => {}
+                };
+                let channel = *channel as usize;
+                let texture_load_op = match (*load_type, pixel_layout) {
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D8x1 ) |
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D8x2 ) |
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D8x4 ) |
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D16x1) |
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D16x2) |
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D16x4) |
+                    (TextureLoadType::I32FromF32,  PixelDataLayout::D8x1 ) |
+                    (TextureLoadType::I32FromF32,  PixelDataLayout::D8x2 ) |
+                    (TextureLoadType::I32FromF32,  PixelDataLayout::D8x4 ) |
+                    (TextureLoadType::I32FromF32,  PixelDataLayout::D16x1) |
+                    (TextureLoadType::I32FromF32,  PixelDataLayout::D16x2) |
+                    (TextureLoadType::I32FromF32,  PixelDataLayout::D16x4) => None?,
+
+                    (TextureLoadType::I32FromF32,  PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u32>(u, v);
+                        f32::from_bits(x) as i32 as u32
+                    },
+                    (TextureLoadType::I32FromF32,  PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 2]>(u, v);
+                        f32::from_bits(data[channel]) as i32 as u32
+                    },
+                    (TextureLoadType::I32FromF32,  PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 2]>(u, v);
+                        f32::from_bits(data[channel]) as i32 as u32
+                    },
+
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D32x1) |
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D32x1) |
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u32>(u, v);
+                        x
+                    },
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D32x2) |
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D32x2) |
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 2]>(u, v);
+                        data[channel]
+                    },
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D32x4) |
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D32x4) |
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 4]>(u, v);
+                        data[channel]
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u16>(u, v);
+                        x as u32
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 2]>(u, v);
+                        data[channel] as u32
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        data[channel] as u32
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u8>(u, v);
+                        x as u32
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 2]>(u, v);
+                        data[channel] as u32
+                    },
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        data[channel] as u32
+                    },
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u16>(u, v);
+                        x as i16 as i32 as u32
+                    },
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 2]>(u, v);
+                        data[channel] as i16 as i32 as u32
+                    },
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        data[channel] as i16 as i32 as u32
+                    },
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u8>(u, v);
+                        x as i8 as i32 as u32
+                    },
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 2]>(u, v);
+                        data[channel] as i8 as i32 as u32
+                    },
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        data[channel] as i8 as i32 as u32
+                    },
+
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<(u32)>(u, v);
+                        (x as i32 as f32 / std::i32::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 2]>(u, v);
+                        (data[channel] as i32 as f32 / std::i32::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 4]>(u, v);
+                        (data[channel] as i32 as f32 / std::i32::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<(u16)>(u, v);
+                        (x as i16 as i32 as f32 / std::i16::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 2]>(u, v);
+                        (data[channel] as i16 as i32 as f32 / std::i16::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        (data[channel] as i16 as i32 as f32 / std::i16::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<(u8)>(u, v);
+                        (x as i8 as i32 as f32 / std::i8::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 2]>(u, v);
+                        (data[channel] as i8 as i32 as f32 / std::i8::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        (data[channel] as i8 as i32 as f32 / std::i8::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u32>(u, v);
+                        (x as f32 / std::u32::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 2]>(u, v);
+                        (data[channel] as f32 / std::u32::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 4]>(u, v);
+                        (data[channel] as f32 / std::u32::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u16>(u, v);
+                        (x as f32 / std::u16::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 2]>(u, v);
+                        (data[channel] as f32 / std::u16::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        (data[channel] as f32 / std::u16::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u8>(u, v);
+                        (x as f32 / std::u8::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 2]>(u, v);
+                        (data[channel] as f32 / std::u8::MAX as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        (data[channel] as f32 / std::u8::MAX as f32).to_bits()
+                    },
+
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u32>(u, v);
+                        (x as i32 as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 2]>(u, v);
+                        (data[channel] as i32 as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 4]>(u, v);
+                        (data[channel] as i32 as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u16>(u, v);
+                        (x as i16 as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 2]>(u, v);
+                        (data[channel] as i16 as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        (data[channel] as i16 as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u8>(u, v);
+                        (x as i8 as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 2]>(u, v);
+                        (data[channel] as i8 as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        (data[channel] as i8 as f32).to_bits()
+                    },
+
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u32>(u, v);
+                        (x as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 2]>(u, v);
+                        (data[channel] as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D32x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u32; 4]>(u, v);
+                        (data[channel] as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u16>(u, v);
+                        (x as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 2]>(u, v);
+                        (data[channel] as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D16x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u16; 4]>(u, v);
+                        (data[channel] as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let x = texture.fetch::<u8>(u, v);
+                        (x as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 2]>(u, v);
+                        (data[channel] as f32).to_bits()
+                    },
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D8x4) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                        let data = texture.fetch::<[u8; 4]>(u, v);
+                        (data[channel] as f32).to_bits()
+                    },
+                };
+                match coord_register {
+                    RegisterRead::Core(coord_register_list) => (0..n).for_each(|i| {
+                        let [x, y, ..] = coord_register_list[i];
+                        scalar_register[i] = texture_load_op(x, y, texture, channel);
+                    }),
+                    RegisterRead::Uniform(coord_register) => {
+                        let [x, y, ..] = *coord_register;
+                        let value = texture_load_op(x, y, texture, channel);
+                        scalar_register[0..n].fill(value);
+                    },
+                }
+            },
+            ShaderInstruction::ScalarUnaryOp { src, dst, op } => {
+                let from_register = self.read_scalar_register(*src, run_context);
+                let to_register = self.write_scalar_register(*dst, run_context)?;
+                let op_fn = match op {
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToI32) => |x: u32| f32::from_bits(x) as i32 as u32,
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToU32) => |x: u32| f32::from_bits(x) as u32,
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::U32ToF32) => |x: u32| (x as f32).to_bits(),
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::I32toF32) => |x: u32| (x as i32 as f32).to_bits(),
+                    ScalarUnaryOp::Negative(OpDataType::F32)               => |x: u32| (- f32::from_bits(x)).to_bits(),
+                    ScalarUnaryOp::Negative(OpDataType::I32)               => |x: u32| (- (x as i32)) as u32,
+                    ScalarUnaryOp::Sign(OpDataType::F32)                   => |x: u32| f32::from_bits(x).signum().to_bits(),
+                    ScalarUnaryOp::Sign(OpDataType::I32)                   => |x: u32| (x as i32).signum() as u32,
+                    ScalarUnaryOp::Reciporocal                             => |x: u32| f32::from_bits(x).recip().to_bits(),
+                    ScalarUnaryOp::Sin                                     => |x: u32| f32::from_bits(x).sin().to_bits(),
+                    ScalarUnaryOp::Cos                                     => |x: u32| f32::from_bits(x).cos().to_bits(),
+                    ScalarUnaryOp::Tan                                     => |x: u32| f32::from_bits(x).tan().to_bits(),
+                    ScalarUnaryOp::ASin                                    => |x: u32| f32::from_bits(x).asin().to_bits(),
+                    ScalarUnaryOp::ACos                                    => |x: u32| f32::from_bits(x).acos().to_bits(),
+                    ScalarUnaryOp::Atan                                    => |x: u32| f32::from_bits(x).atan().to_bits(),
+                    ScalarUnaryOp::Ln                                      => |x: u32| f32::from_bits(x).ln().to_bits(),
+                    ScalarUnaryOp::Exp                                     => |x: u32| f32::from_bits(x).exp().to_bits(),
+                };
+                match from_register {
+                    RegisterRead::Core(from_register_list) => (0..n).for_each(|i| to_register[i] = op_fn(from_register_list[i])),
+                    RegisterRead::Uniform(from_register) => to_register[0..n].fill(op_fn(*from_register)),
+                }
+            },
+            ShaderInstruction::ScalarBinaryOp { src_a, src_b, dst, op } => {
+                let from_a_register = self.read_scalar_register(*src_a, run_context);
+                let from_b_register = self.read_scalar_register(*src_b, run_context);
+                let to_register = self.write_scalar_register(*dst, run_context)?;
+                let op_fn = match op {
+                    ScalarBinaryOp::Add(OpDataType::I32)      => |a: u32, b: u32| (a as i32).wrapping_add(b as i32) as u32,
+                    ScalarBinaryOp::Add(OpDataType::F32)      => |a: u32, b: u32| (f32::from_bits(a) + f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Subtract(OpDataType::I32) => |a: u32, b: u32| (a as i32).wrapping_sub(b as i32) as u32,
+                    ScalarBinaryOp::Subtract(OpDataType::F32) => |a: u32, b: u32| (f32::from_bits(a) + f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Multiply(OpDataType::I32) => |a: u32, b: u32| (a as i32).wrapping_mul(b as i32) as u32,
+                    ScalarBinaryOp::Multiply(OpDataType::F32) => |a: u32, b: u32| (f32::from_bits(a) * f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Divide(OpDataType::I32)   => |a: u32, b: u32| (a as i32).wrapping_div(b as i32) as u32,
+                    ScalarBinaryOp::Divide(OpDataType::F32)   => |a: u32, b: u32| (f32::from_bits(a) / f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Modulo(OpDataType::I32)   => |a: u32, b: u32| (a as i32).rem(b as i32) as u32,
+                    ScalarBinaryOp::Modulo(OpDataType::F32)   => |a: u32, b: u32| f32::from_bits(a).rem(f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Atan2                     => |a: u32, b: u32| f32::atan2(f32::from_bits(a), f32::from_bits(b)).to_bits(),
+                };
+                match (from_a_register, from_b_register) {
+                    (RegisterRead::Core(from_a_reg_list), RegisterRead::Core(from_b_reg_list)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(from_a_reg_list[i], from_b_reg_list[i])),
+                    (RegisterRead::Core(from_a_reg_list), RegisterRead::Uniform(from_b_reg)  ) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(from_a_reg_list[i], *from_b_reg)),
+                    (RegisterRead::Uniform(from_a_reg),  RegisterRead::Core(from_b_reg_list)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(*from_a_reg, from_b_reg_list[i])),
+                    (RegisterRead::Uniform(from_a_reg),  RegisterRead::Uniform(from_b_reg)  ) => 
+                        to_register[0..n].fill(op_fn(*from_a_reg, *from_b_reg)),
+                }
+            },
+            ShaderInstruction::VectorComponentwiseScalarUnaryOp { src, dst, op } => {
+                let from_register = self.read_vector_register(*src, run_context);
+                let to_register = self.write_vector_register(*dst, run_context)?;
+                let op_fn = match op {
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToI32) => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]) as i32 as u32),
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToU32) => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]) as u32),
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::U32ToF32) => |x: [u32; 4]| [0, 1, 2, 3].map(|c| (x[c] as f32).to_bits()),
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::I32toF32) => |x: [u32; 4]| [0, 1, 2, 3].map(|c| (x[c] as i32 as f32).to_bits()),
+                    ScalarUnaryOp::Negative(OpDataType::F32)               => |x: [u32; 4]| [0, 1, 2, 3].map(|c| (- f32::from_bits(x[c])).to_bits()),
+                    ScalarUnaryOp::Negative(OpDataType::I32)               => |x: [u32; 4]| [0, 1, 2, 3].map(|c| (- (x[c] as i32)) as u32),
+                    ScalarUnaryOp::Sign(OpDataType::F32)                   => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).signum().to_bits()),
+                    ScalarUnaryOp::Sign(OpDataType::I32)                   => |x: [u32; 4]| [0, 1, 2, 3].map(|c| (x[c] as i32).signum() as u32),
+                    ScalarUnaryOp::Reciporocal                             => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).recip().to_bits()),
+                    ScalarUnaryOp::Sin                                     => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).sin().to_bits()),
+                    ScalarUnaryOp::Cos                                     => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).cos().to_bits()),
+                    ScalarUnaryOp::Tan                                     => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).tan().to_bits()),
+                    ScalarUnaryOp::ASin                                    => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).asin().to_bits()),
+                    ScalarUnaryOp::ACos                                    => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).acos().to_bits()),
+                    ScalarUnaryOp::Atan                                    => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).atan().to_bits()),
+                    ScalarUnaryOp::Ln                                      => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).ln().to_bits()),
+                    ScalarUnaryOp::Exp                                     => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).exp().to_bits()),
+                };
+                match from_register {
+                    RegisterRead::Core(from_register_list) => (0..n).for_each(|i| to_register[i] = op_fn(from_register_list[i])),
+                    RegisterRead::Uniform(from_register) => to_register[0..n].fill(op_fn(*from_register)),
+                }
+            },
+            ShaderInstruction::VectorComponentwiseScalarBinaryOp { src_a, src_b, dst, op } => {
+                let from_a_register = self.read_vector_register(*src_a, run_context);
+                let from_b_register = self.read_vector_register(*src_b, run_context);
+                let to_register = self.write_vector_register(*dst, run_context)?;
+                let op_fn = match op {
+                    ScalarBinaryOp::Add(OpDataType::I32)      => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_add(b[c] as i32) as u32),
+                    ScalarBinaryOp::Add(OpDataType::F32)      => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) + f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Subtract(OpDataType::I32) => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_sub(b[c] as i32) as u32),
+                    ScalarBinaryOp::Subtract(OpDataType::F32) => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) + f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Multiply(OpDataType::I32) => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_mul(b[c] as i32) as u32),
+                    ScalarBinaryOp::Multiply(OpDataType::F32) => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) * f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Divide(OpDataType::I32)   => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_div(b[c] as i32) as u32),
+                    ScalarBinaryOp::Divide(OpDataType::F32)   => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) / f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Modulo(OpDataType::I32)   => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).rem(b[c] as i32) as u32),
+                    ScalarBinaryOp::Modulo(OpDataType::F32)   => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(a[c]).rem(f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Atan2                     => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| f32::atan2(f32::from_bits(a[c]), f32::from_bits(b[c])).to_bits()),
+                };
+                match (from_a_register, from_b_register) {
+                    (RegisterRead::Core(from_a_reg_list), RegisterRead::Core(from_b_reg_list)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(from_a_reg_list[i], from_b_reg_list[i])),
+                    (RegisterRead::Core(from_a_reg_list), RegisterRead::Uniform(from_b_reg)  ) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(from_a_reg_list[i], *from_b_reg)),
+                    (RegisterRead::Uniform(from_a_reg),  RegisterRead::Core(from_b_reg_list)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(*from_a_reg, from_b_reg_list[i])),
+                    (RegisterRead::Uniform(from_a_reg),  RegisterRead::Uniform(from_b_reg)  ) => 
+                        to_register[0..n].fill(op_fn(*from_a_reg, *from_b_reg)),
+                }
+            },
+            ShaderInstruction::VectorComponentwiseScalarTernaryOp { src_a, src_b, src_c, dst, op } => {
+                let from_a_register = self.read_vector_register(*src_a, run_context);
+                let from_b_register = self.read_vector_register(*src_b, run_context);
+                let from_c_register = self.read_vector_register(*src_c, run_context);
+                let to_register = self.write_vector_register(*dst, run_context)?;
+                let op_fn = match op {
+                    ScalarTernaryOp::Fma(OpDataType::F32) => |a: [u32; 4], b: [u32; 4], c: [u32; 4]| [0, 1, 2, 3].map(|i| {
+                        (f32::from_bits(a[i]) * f32::from_bits(b[i]) + f32::from_bits(c[i])).to_bits()
+                    }),
+                    ScalarTernaryOp::Fma(OpDataType::I32) => |a: [u32; 4], b: [u32; 4], c: [u32; 4]| [0, 1, 2, 3].map(|i| {
+                        (a[i] as i32).wrapping_mul(b[i] as i32).wrapping_add(c[i] as i32) as u32
+                    }),
+                    ScalarTernaryOp::Lerp => |a: [u32; 4], b: [u32; 4], c: [u32; 4]| [0, 1, 2, 3].map(|i| {
+                        let t = f32::from_bits(c[i]);
+                        let rev_t = 1.0 - t;
+                        (f32::from_bits(a[i]) * t + f32::from_bits(b[i]) * rev_t).to_bits()
+                    }),
+                };
+                for i in 0..n {
+                    let from_a = match from_a_register {
+                        RegisterRead::Core(register_list) => register_list[i],
+                        RegisterRead::Uniform(register) => *register
+                    };
+                    let from_b = match from_b_register {
+                        RegisterRead::Core(register_list) => register_list[i],
+                        RegisterRead::Uniform(register) => *register
+                    };
+                    let from_c = match from_c_register {
+                        RegisterRead::Core(register_list) => register_list[i],
+                        RegisterRead::Uniform(register) => *register
+                    };
+                    to_register[i] = op_fn(from_a, from_b, from_c);
+                }
+            },
+            ShaderInstruction::VectorComponentwiseScalarUnaryOpMasked { src, dst, op, mask } => {
+                let from_register = self.read_vector_register(*src, run_context);
+                let to_register = self.write_vector_register(*dst, run_context)?;
+                let op_fn = match op {
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToI32) => |x: u32| f32::from_bits(x) as i32 as u32,
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToU32) => |x: u32| f32::from_bits(x) as u32,
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::U32ToF32) => |x: u32| (x as f32).to_bits(),
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::I32toF32) => |x: u32| (x as i32 as f32).to_bits(),
+                    ScalarUnaryOp::Negative(OpDataType::F32)               => |x: u32| (- f32::from_bits(x)).to_bits(),
+                    ScalarUnaryOp::Negative(OpDataType::I32)               => |x: u32| (- (x as i32)) as u32,
+                    ScalarUnaryOp::Sign(OpDataType::F32)                   => |x: u32| f32::from_bits(x).signum().to_bits(),
+                    ScalarUnaryOp::Sign(OpDataType::I32)                   => |x: u32| (x as i32).signum() as u32,
+                    ScalarUnaryOp::Reciporocal                             => |x: u32| f32::from_bits(x).recip().to_bits(),
+                    ScalarUnaryOp::Sin                                     => |x: u32| f32::from_bits(x).sin().to_bits(),
+                    ScalarUnaryOp::Cos                                     => |x: u32| f32::from_bits(x).cos().to_bits(),
+                    ScalarUnaryOp::Tan                                     => |x: u32| f32::from_bits(x).tan().to_bits(),
+                    ScalarUnaryOp::ASin                                    => |x: u32| f32::from_bits(x).asin().to_bits(),
+                    ScalarUnaryOp::ACos                                    => |x: u32| f32::from_bits(x).acos().to_bits(),
+                    ScalarUnaryOp::Atan                                    => |x: u32| f32::from_bits(x).atan().to_bits(),
+                    ScalarUnaryOp::Ln                                      => |x: u32| f32::from_bits(x).ln().to_bits(),
+                    ScalarUnaryOp::Exp                                     => |x: u32| f32::from_bits(x).exp().to_bits(),
+                };
+                for c in 0..4 {
+                    for i in 0..n {
+                        let from = match from_register {
+                            RegisterRead::Core(register_list) => (register_list[i])[c],
+                            RegisterRead::Uniform(register) => (*register)[c]
+                        };
+                        (to_register[i])[c] = op_fn(from);
+                    }
+                }
+            },
+            ShaderInstruction::VectorComponentwiseScalarBinaryOpMasked { src_a, src_b, dst, op, mask } => {
                 todo!()
             },
-            ShaderInstruction::LoadTextureVector { src_xy_u32, dst, texture } => todo!(),
-            ShaderInstruction::LoadTextureScalar { src_xy_u32, channel, dst, texture } => todo!(),
-            ShaderInstruction::ScalarUnaryOp { src, dst, op } => todo!(),
-            ShaderInstruction::ScalarBinaryOp { src_a, src_b, dst, op } => todo!(),
-            ShaderInstruction::VectorComponentwiseScalarUnaryOp { src, dst, op } => todo!(),
-            ShaderInstruction::VectorComponentwiseScalarBinaryOp { src_a, src_b, dst, op } => todo!(),
-            ShaderInstruction::VectorComponentwiseScalarTernaryOp { src_a, src_b, src_c, dst, op } => todo!(),
-            ShaderInstruction::VectorComponentwiseScalarUnaryOpMasked { src, dst, op, mask } => todo!(),
-            ShaderInstruction::VectorComponentwiseScalarBinaryOpMasked { src_a, src_b, dst, op, mask } => todo!(),
-            ShaderInstruction::VectorComponentwiseScalarTernaryOpMasked { src_a, src_b, src_c, dst, op, mask } => todo!(),
-            ShaderInstruction::VectorToVectorUnaryOp { src, dst, op } => todo!(),
-            ShaderInstruction::VectorToScalarUnaryOp { src, dst, op } => todo!(),
+            ShaderInstruction::VectorComponentwiseScalarTernaryOpMasked { src_a, src_b, src_c, dst, op, mask } => {
+                todo!()
+            },
+            ShaderInstruction::VectorToVectorUnaryOp { src, dst, op } => {
+                todo!()
+            },
+            ShaderInstruction::VectorToScalarUnaryOp { src, dst, op } => {
+                todo!()
+            },
         }
         Some(())
     }
