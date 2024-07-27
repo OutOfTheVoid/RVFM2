@@ -130,14 +130,29 @@ pub enum ScalarUnaryOp {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Comparison {
+    Equal,
+    NotEqual,
+    GreaterThan,
+    LessThanOrEqual,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ScalarBinaryOp {
-    Add      ( OpDataType ),
-    Subtract ( OpDataType ),
-    Multiply ( OpDataType ),
-    Divide   ( OpDataType ),
-    Modulo   ( OpDataType ),
+    Compare         ( OpDataType, Comparison ),
+    Add             ( OpDataType ),
+    Subtract        ( OpDataType ),
+    Multiply        ( OpDataType ),
+    Divide          ( OpDataType ),
+    Modulo          ( OpDataType ),
     // F32 only
     Atan2,
+    // I32 as U32 Only
+    CompareUnsigned ( Comparison ),
+    And,
+    AndNot,
+    Or,
+    Xor
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -166,6 +181,7 @@ const COMPONENT_MASK_Y: u8 = 2;
 const COMPONENT_MASK_Z: u8 = 4;
 const COMPONENT_MASK_W: u8 = 8;
 
+#[derive(Debug)]
 pub enum ShaderInstruction {
     PushVector(RegisterAddress<Vector>),
     PushScalar(RegisterAddress<Scalar>),
@@ -179,12 +195,34 @@ pub enum ShaderInstruction {
         from: RegisterAddress<Scalar>,
         to: RegisterAddress<Scalar>
     },
+    ConditionallyCopyVectorRegister {
+        cond: RegisterAddress<Scalar>,
+        from: RegisterAddress<Vector>,
+        to: RegisterAddress<Vector>
+    },
+    ConditionallyCopyScalarRegister {
+        cond: RegisterAddress<Scalar>,
+        from: RegisterAddress<Scalar>,
+        to: RegisterAddress<Scalar>
+    },
     CopyVectorComponentToScalar {
         channel: VectorChannel,
         from: RegisterAddress<Vector>,
         to: RegisterAddress<Scalar>
     },
+    ConditionallyCopyVectorComponentToScalar {
+        cond: RegisterAddress<Scalar>,
+        channel: VectorChannel,
+        from: RegisterAddress<Vector>,
+        to: RegisterAddress<Scalar>
+    },
     CopyScalarToVectorComponent {
+        channel: VectorChannel,
+        from: RegisterAddress<Scalar>,
+        to: RegisterAddress<Vector>
+    },
+    ConditionallyCopyScalarToVectorComponent {
+        cond: RegisterAddress<Scalar>,
         channel: VectorChannel,
         from: RegisterAddress<Scalar>,
         to: RegisterAddress<Vector>
@@ -209,6 +247,14 @@ pub enum ShaderInstruction {
         addr_src_u32: Option<RegisterAddress<Scalar>>,
         buffer: u8,
     },
+    ConditionallyWriteVectorToBuffer {
+        cond: RegisterAddress<Scalar>,
+        data_type: VectorBufferWriteType,
+        src: RegisterAddress<Vector>,
+        offset: u32,
+        addr_src_u32: Option<RegisterAddress<Scalar>>,
+        buffer: u8,
+    },
     ReadBufferToScalar {
         data_type: BufferReadType,
         scalar: RegisterAddress<Scalar>,
@@ -217,6 +263,14 @@ pub enum ShaderInstruction {
         buffer: u8,
     },
     WriteScalarToBuffer {
+        data_type: BufferWriteType,
+        scalar: RegisterAddress<Scalar>,
+        offset: u32,
+        addr_dst_u32: Option<RegisterAddress<Scalar>>,
+        buffer: u8,
+    },
+    ConditionallyWriteScalarToBuffer {
+        cond: RegisterAddress<Scalar>,
         data_type: BufferWriteType,
         scalar: RegisterAddress<Scalar>,
         offset: u32,
@@ -298,32 +352,60 @@ pub enum ShaderInstruction {
     },
 }
 
+pub const CORE_COUNT: usize = 0x1000;
+pub const STACK_SIZE: usize = 0x400;
+pub const LOCAL_COUNT: usize = 0x20;
+pub const INPUT_OUTPUT_COUNT: usize = 0x100;
+pub const CONST_COUNT: usize = 0x100;
+
+type InputArrayRef<'a, T> = &'a mut [[T; CORE_COUNT]; INPUT_OUTPUT_COUNT];
+type ConstArrayRef<'a, T> = &'a mut [T; CONST_COUNT];
+type OutputArrayRef<'a, T> = &'a mut [[T; CORE_COUNT]; INPUT_OUTPUT_COUNT];
+
+type InputOutputArray<T> = [[T; CORE_COUNT]; INPUT_OUTPUT_COUNT];
+type ConstantArray<T> = [T; CONST_COUNT];
+
 #[derive(Debug)]
-pub struct ShadingUnitRunContext<'i, 'o> {
-    pub scalar_input_array: InputArray<'i, [u32; CORE_COUNT]>,
-    pub vector_input_array: InputArray<'i, [[u32; 4]; CORE_COUNT]>,
-    pub scalar_constant_array: InputArray<'i, u32>,
-    pub vector_constant_array: InputArray<'i, [u32; 4]>,
-    pub scalar_output_array: OutputArray<'o, [u32; CORE_COUNT]>,
-    pub vector_output_array: OutputArray<'o, [[u32; 4]; CORE_COUNT]>,
+pub struct ShadingUnitRunContext<'a> {
+    pub scalar_input_array: InputArrayRef<'a, u32>,
+    pub vector_input_array: InputArrayRef<'a, [u32; 4]>,
+    pub scalar_constant_array: ConstArrayRef<'a, u32>,
+    pub vector_constant_array: ConstArrayRef<'a, [u32; 4]>,
+    pub scalar_output_array: OutputArrayRef<'a, u32>,
+    pub vector_output_array: OutputArrayRef<'a, [u32; 4]>,
 }
 
-const CORE_COUNT: usize = 0x1000;
-const STACK_SIZE: usize = 0x400;
-const LOCAL_COUNT: usize = 0x20;
-const INPUT_COUNT: usize = 0x100;
-const OUTPUT_COUNT: usize = 0x100;
+pub struct ShadingUnitConstantArray {
+    scalar_constant_array: ConstantArray<u32>,
+    vector_constant_array: ConstantArray<[u32; 4]>,
+}
 
-type InputArray<'a, T> = &'a [T; INPUT_COUNT];
-type OutputArray<'a, T> = &'a mut [T; OUTPUT_COUNT];
+pub struct ShadingUnitIOArray {
+    scalar_array: InputOutputArray<u32>,
+    vector_array: InputOutputArray<[u32; 4]>,
+}
 
-struct ShadingUnitContext {
+#[derive(Debug)]
+pub struct ShadingUnitContext {
     scalar_stack_array: [[ u32     ; CORE_COUNT]; STACK_SIZE],
     scalar_stack_size:  usize,
     vector_stack_array: [[[u32; 4] ; CORE_COUNT]; STACK_SIZE],
     vector_stack_size:  usize,
     scalar_locals:      [[ u32     ; CORE_COUNT]; LOCAL_COUNT],
     vector_locals:      [[[u32; 4] ; CORE_COUNT]; LOCAL_COUNT],
+}
+
+impl ShadingUnitContext {
+    pub fn new() -> Box<Self> {
+        Box::new(Self {
+            scalar_stack_array: [[ 0;     CORE_COUNT]; STACK_SIZE],
+            scalar_stack_size:  0,
+            vector_stack_array: [[[0; 4]; CORE_COUNT]; STACK_SIZE],
+            vector_stack_size:  0,
+            scalar_locals:      [[ 0;     CORE_COUNT]; LOCAL_COUNT],
+            vector_locals:      [[[0; 4]; CORE_COUNT]; LOCAL_COUNT],
+        })
+    }
 }
 
 enum RegisterRead<'a, T> {
@@ -355,7 +437,7 @@ impl<T> RegisterReadPtr<T> {
 }
 
 impl ShadingUnitContext {
-    pub fn run_instruction<'i, 'o, 'rc>(&mut self, n: usize, instruction: &ShaderInstruction, run_context: &'rc mut ShadingUnitRunContext<'i, 'o>, buffer_modules: &mut [BufferModule; 256], texture_modules: &mut [TextureModule; 64]) -> Option<()> {
+    pub fn run_instruction<'io, 'rc>(&mut self, n: usize, instruction: &ShaderInstruction, run_context: &'rc mut ShadingUnitRunContext<'io>, buffer_modules: &mut [BufferModule; 256], texture_modules: &mut [TextureModule; 64]) -> Option<()> {
         match instruction {
             ShaderInstruction::PushVector(register) => {
                 let source_register = self.read_vector_register(*register, run_context);
@@ -396,6 +478,26 @@ impl ShadingUnitContext {
                     RegisterRead::Uniform(from_register) => to_register_list[0..n].fill(*from_register),
                 }
             },
+            ShaderInstruction::ConditionallyCopyVectorRegister { cond, from, to } => {
+                if *from == *to { None? }
+                let cond_register = self.read_scalar_register(*cond, run_context);
+                let from_register = self.read_vector_register(*from, run_context);
+                let to_register_list = self.write_vector_register(*to, run_context)?;
+                match cond_register {
+                    RegisterRead::Uniform(cond_register) => if *cond_register != 0 {
+                        match from_register {
+                            RegisterRead::Core(from_register_list) => to_register_list[0..n].copy_from_slice(&from_register_list[0..n]),
+                            RegisterRead::Uniform(from_register) => to_register_list[0..n].fill(*from_register),
+                        }
+                    },
+                    RegisterRead::Core(cond_register_list) => {
+                        match from_register {
+                            RegisterRead::Core(from_register_list) => (0..n).for_each(|i| if cond_register_list[i] != 0 { to_register_list[i] = from_register_list[i]; }),
+                            RegisterRead::Uniform(from_register) => (0..n).for_each(|i| if cond_register_list[i] != 0 { to_register_list[i] = *from_register; }),
+                        }
+                    }
+                }
+            },
             ShaderInstruction::CopyScalarRegister { from, to } => {
                 if *from == *to { None? }
                 let from_register = self.read_scalar_register(*from, run_context);
@@ -403,6 +505,30 @@ impl ShadingUnitContext {
                 match from_register {
                     RegisterRead::Core(from_register_list) => to_register_list[0..n].copy_from_slice(&from_register_list[0..n]),
                     RegisterRead::Uniform(from_register) => to_register_list[0..n].fill(*from_register),
+                }
+            },
+            ShaderInstruction::ConditionallyCopyScalarRegister { cond, from, to } => {
+                if *from == *to { None? }
+                let cond_register = self.read_scalar_register(*cond, run_context);
+                let from_register = self.read_scalar_register(*from, run_context);
+                let to_register_list = self.write_scalar_register(*to, run_context)?;
+                match from_register {
+                    RegisterRead::Core(from_register_list) => to_register_list[0..n].copy_from_slice(&from_register_list[0..n]),
+                    RegisterRead::Uniform(from_register) => to_register_list[0..n].fill(*from_register),
+                }
+                match cond_register {
+                    RegisterRead::Uniform(cond_register) => if *cond_register != 0 {
+                        match from_register {
+                            RegisterRead::Core(from_register_list) => to_register_list[0..n].copy_from_slice(&from_register_list[0..n]),
+                            RegisterRead::Uniform(from_register) => to_register_list[0..n].fill(*from_register),
+                        }
+                    },
+                    RegisterRead::Core(cond_register_list) => {
+                        match from_register {
+                            RegisterRead::Core(from_register_list) => (0..n).for_each(|i| if cond_register_list[i] != 0 { to_register_list[i] = from_register_list[i]; }),
+                            RegisterRead::Uniform(from_register) => (0..n).for_each(|i| if cond_register_list[i] != 0 { to_register_list[i] = *from_register; }),
+                        }
+                    }
                 }
             },
             ShaderInstruction::CopyVectorComponentToScalar { channel, from, to } => {
@@ -417,6 +543,34 @@ impl ShadingUnitContext {
                             .for_each(|i| to_register_list[i] = from_register[*channel as usize]),
                 }
             },
+            ShaderInstruction::ConditionallyCopyVectorComponentToScalar { cond, channel, from, to } => {
+                let cond_register = self.read_scalar_register(*cond, run_context);
+                let from_register = self.read_vector_register(*from, run_context);
+                let to_register_list = self.write_scalar_register(*to, run_context)?;
+                match cond_register {
+                    RegisterRead::Uniform(cond_register) => if *cond_register != 0 {
+                        match from_register {
+                            RegisterRead::Core(from_register_list) =>
+                                (0..n)
+                                    .for_each(|i| to_register_list[i] = from_register_list[i][*channel as usize]),
+                            RegisterRead::Uniform(from_register) =>
+                                (0..n)
+                                    .for_each(|i| to_register_list[i] = from_register[*channel as usize]),
+                        }
+                    },
+                    RegisterRead::Core(cond_register_list) => {
+                        match from_register {
+                            RegisterRead::Core(from_register_list) =>
+                                (0..n)
+                                    .for_each(|i| if cond_register_list[i] != 0 { to_register_list[i] = from_register_list[i][*channel as usize] }),
+                            RegisterRead::Uniform(from_register) =>
+                                (0..n)
+                                    .for_each(|i| if cond_register_list[i] != 0 { to_register_list[i] = from_register[*channel as usize] }),
+                        }
+                    }
+                }
+                
+            },
             ShaderInstruction::CopyScalarToVectorComponent { channel, from, to } => {
                 let from_register = self.read_scalar_register(*from, run_context);
                 let to_register_list = self.write_vector_register(*to, run_context)?;
@@ -427,6 +581,33 @@ impl ShadingUnitContext {
                     RegisterRead::Uniform(from_register) =>
                         (0..n)
                             .for_each(|i| to_register_list[i][*channel as usize] = *from_register),
+                }
+            },
+            ShaderInstruction::ConditionallyCopyScalarToVectorComponent { cond, channel, from, to } => {
+                let cond_register = self.read_scalar_register(*cond, run_context);
+                let from_register = self.read_scalar_register(*from, run_context);
+                let to_register_list = self.write_vector_register(*to, run_context)?;
+                match cond_register {
+                    RegisterRead::Uniform(cond_register) => if *cond_register != 0 {
+                        match from_register {
+                            RegisterRead::Core(from_register_list) =>
+                                (0..n)
+                                    .for_each(|i| to_register_list[i][*channel as usize] = from_register_list[i]),
+                            RegisterRead::Uniform(from_register) =>
+                                (0..n)
+                                    .for_each(|i| to_register_list[i][*channel as usize] = *from_register),
+                        }
+                    },
+                    RegisterRead::Core(cond_register_list) => {
+                        match from_register {
+                            RegisterRead::Core(from_register_list) =>
+                                (0..n)
+                                    .for_each(|i| if cond_register_list[i] != 0 { to_register_list[i][*channel as usize] = from_register_list[i]; }),
+                            RegisterRead::Uniform(from_register) =>
+                                (0..n)
+                                    .for_each(|i| if cond_register_list[i] != 0 { to_register_list[i][*channel as usize] = *from_register }),
+                        }
+                    },
                 }
             },
             ShaderInstruction::CopyScalarToVectorComponentsMasked { channel, from, to, mask } => {
@@ -1319,17 +1500,33 @@ impl ShadingUnitContext {
                 let from_b_register = self.read_scalar_register(*src_b, run_context);
                 let to_register = self.write_scalar_register(*dst, run_context)?;
                 let op_fn = match op {
-                    ScalarBinaryOp::Add(OpDataType::I32)      => |a: u32, b: u32| (a as i32).wrapping_add(b as i32) as u32,
-                    ScalarBinaryOp::Add(OpDataType::F32)      => |a: u32, b: u32| (f32::from_bits(a) + f32::from_bits(b)).to_bits(),
-                    ScalarBinaryOp::Subtract(OpDataType::I32) => |a: u32, b: u32| (a as i32).wrapping_sub(b as i32) as u32,
-                    ScalarBinaryOp::Subtract(OpDataType::F32) => |a: u32, b: u32| (f32::from_bits(a) + f32::from_bits(b)).to_bits(),
-                    ScalarBinaryOp::Multiply(OpDataType::I32) => |a: u32, b: u32| (a as i32).wrapping_mul(b as i32) as u32,
-                    ScalarBinaryOp::Multiply(OpDataType::F32) => |a: u32, b: u32| (f32::from_bits(a) * f32::from_bits(b)).to_bits(),
-                    ScalarBinaryOp::Divide(OpDataType::I32)   => |a: u32, b: u32| (a as i32).wrapping_div(b as i32) as u32,
-                    ScalarBinaryOp::Divide(OpDataType::F32)   => |a: u32, b: u32| (f32::from_bits(a) / f32::from_bits(b)).to_bits(),
-                    ScalarBinaryOp::Modulo(OpDataType::I32)   => |a: u32, b: u32| (a as i32).rem(b as i32) as u32,
-                    ScalarBinaryOp::Modulo(OpDataType::F32)   => |a: u32, b: u32| f32::from_bits(a).rem(f32::from_bits(b)).to_bits(),
-                    ScalarBinaryOp::Atan2                     => |a: u32, b: u32| f32::atan2(f32::from_bits(a), f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Compare(OpDataType::F32, Comparison::Equal)           => |a: u32, b: u32| if f32::from_bits(a) == f32::from_bits(b) { 1 } else { 0 },
+                    ScalarBinaryOp::Compare(OpDataType::F32, Comparison::NotEqual)        => |a: u32, b: u32| if f32::from_bits(a) != f32::from_bits(b) { 1 } else { 0 },
+                    ScalarBinaryOp::Compare(OpDataType::F32, Comparison::LessThanOrEqual) => |a: u32, b: u32| if f32::from_bits(a) <= f32::from_bits(b) { 1 } else { 0 },
+                    ScalarBinaryOp::Compare(OpDataType::F32, Comparison::GreaterThan)     => |a: u32, b: u32| if f32::from_bits(a) >  f32::from_bits(b) { 1 } else { 0 },
+                    ScalarBinaryOp::Compare(OpDataType::I32, Comparison::Equal)           => |a: u32, b: u32| if a as i32 == b as i32 { 1 } else { 0 },
+                    ScalarBinaryOp::Compare(OpDataType::I32, Comparison::NotEqual)        => |a: u32, b: u32| if a as i32 != b as i32 { 1 } else { 0 },
+                    ScalarBinaryOp::Compare(OpDataType::I32, Comparison::LessThanOrEqual) => |a: u32, b: u32| if a as i32 <= b as i32 { 1 } else { 0 },
+                    ScalarBinaryOp::Compare(OpDataType::I32, Comparison::GreaterThan)     => |a: u32, b: u32| if a as i32 >  b as i32 { 1 } else { 0 },
+                    ScalarBinaryOp::CompareUnsigned(Comparison::Equal)                    => |a: u32, b: u32| if a == b { 1 } else { 0 },
+                    ScalarBinaryOp::CompareUnsigned(Comparison::NotEqual)                 => |a: u32, b: u32| if a != b { 1 } else { 0 },
+                    ScalarBinaryOp::CompareUnsigned(Comparison::LessThanOrEqual)          => |a: u32, b: u32| if a <= b { 1 } else { 0 },
+                    ScalarBinaryOp::CompareUnsigned(Comparison::GreaterThan)              => |a: u32, b: u32| if a >  b { 1 } else { 0 },
+                    ScalarBinaryOp::And                                                   => |a: u32, b: u32| a & b,
+                    ScalarBinaryOp::Or                                                    => |a: u32, b: u32| a | b,
+                    ScalarBinaryOp::Xor                                                   => |a: u32, b: u32| a ^ b,
+                    ScalarBinaryOp::AndNot                                                => |a: u32, b: u32| a & !b,
+                    ScalarBinaryOp::Add(OpDataType::I32)                                  => |a: u32, b: u32| (a as i32).wrapping_add(b as i32) as u32,
+                    ScalarBinaryOp::Add(OpDataType::F32)                                  => |a: u32, b: u32| (f32::from_bits(a) + f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Subtract(OpDataType::I32)                             => |a: u32, b: u32| (a as i32).wrapping_sub(b as i32) as u32,
+                    ScalarBinaryOp::Subtract(OpDataType::F32)                             => |a: u32, b: u32| (f32::from_bits(a) + f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Multiply(OpDataType::I32)                             => |a: u32, b: u32| (a as i32).wrapping_mul(b as i32) as u32,
+                    ScalarBinaryOp::Multiply(OpDataType::F32)                             => |a: u32, b: u32| (f32::from_bits(a) * f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Divide(OpDataType::I32)                               => |a: u32, b: u32| (a as i32).wrapping_div(b as i32) as u32,
+                    ScalarBinaryOp::Divide(OpDataType::F32)                               => |a: u32, b: u32| (f32::from_bits(a) / f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Modulo(OpDataType::I32)                               => |a: u32, b: u32| (a as i32).rem(b as i32) as u32,
+                    ScalarBinaryOp::Modulo(OpDataType::F32)                               => |a: u32, b: u32| f32::from_bits(a).rem(f32::from_bits(b)).to_bits(),
+                    ScalarBinaryOp::Atan2                                                 => |a: u32, b: u32| f32::atan2(f32::from_bits(a), f32::from_bits(b)).to_bits(),
                 };
                 match (from_a_register, from_b_register) {
                     (RegisterRead::Core(from_a_reg_list), RegisterRead::Core(from_b_reg_list)) => 
@@ -1374,17 +1571,33 @@ impl ShadingUnitContext {
                 let from_b_register = self.read_vector_register(*src_b, run_context);
                 let to_register = self.write_vector_register(*dst, run_context)?;
                 let op_fn = match op {
-                    ScalarBinaryOp::Add(OpDataType::I32)      => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_add(b[c] as i32) as u32),
-                    ScalarBinaryOp::Add(OpDataType::F32)      => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) + f32::from_bits(b[c])).to_bits()),
-                    ScalarBinaryOp::Subtract(OpDataType::I32) => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_sub(b[c] as i32) as u32),
-                    ScalarBinaryOp::Subtract(OpDataType::F32) => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) + f32::from_bits(b[c])).to_bits()),
-                    ScalarBinaryOp::Multiply(OpDataType::I32) => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_mul(b[c] as i32) as u32),
-                    ScalarBinaryOp::Multiply(OpDataType::F32) => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) * f32::from_bits(b[c])).to_bits()),
-                    ScalarBinaryOp::Divide(OpDataType::I32)   => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_div(b[c] as i32) as u32),
-                    ScalarBinaryOp::Divide(OpDataType::F32)   => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) / f32::from_bits(b[c])).to_bits()),
-                    ScalarBinaryOp::Modulo(OpDataType::I32)   => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).rem(b[c] as i32) as u32),
-                    ScalarBinaryOp::Modulo(OpDataType::F32)   => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(a[c]).rem(f32::from_bits(b[c])).to_bits()),
-                    ScalarBinaryOp::Atan2                     => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| f32::atan2(f32::from_bits(a[c]), f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Compare(OpDataType::F32, Comparison::Equal)           => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if f32::from_bits(a[c]) == f32::from_bits(b[c]) { 1 } else { 0 }),
+                    ScalarBinaryOp::Compare(OpDataType::F32, Comparison::NotEqual)        => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if f32::from_bits(a[c]) != f32::from_bits(b[c]) { 1 } else { 0 }),
+                    ScalarBinaryOp::Compare(OpDataType::F32, Comparison::LessThanOrEqual) => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if f32::from_bits(a[c]) <= f32::from_bits(b[c]) { 1 } else { 0 }),
+                    ScalarBinaryOp::Compare(OpDataType::F32, Comparison::GreaterThan)     => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if f32::from_bits(a[c]) >  f32::from_bits(b[c]) { 1 } else { 0 }),
+                    ScalarBinaryOp::Compare(OpDataType::I32, Comparison::Equal)           => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if a[c] as i32 == b[c] as i32 { 1 } else { 0 }),
+                    ScalarBinaryOp::Compare(OpDataType::I32, Comparison::NotEqual)        => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if a[c] as i32 != b[c] as i32 { 1 } else { 0 }),
+                    ScalarBinaryOp::Compare(OpDataType::I32, Comparison::LessThanOrEqual) => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if a[c] as i32 <= b[c] as i32 { 1 } else { 0 }),
+                    ScalarBinaryOp::Compare(OpDataType::I32, Comparison::GreaterThan)     => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if a[c] as i32 >  b[c] as i32 { 1 } else { 0 }),
+                    ScalarBinaryOp::CompareUnsigned(Comparison::Equal)                    => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if a[c] == b[c] { 1 } else { 0 }),
+                    ScalarBinaryOp::CompareUnsigned(Comparison::NotEqual)                 => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if a[c] != b[c] { 1 } else { 0 }),
+                    ScalarBinaryOp::CompareUnsigned(Comparison::LessThanOrEqual)          => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if a[c] <= b[c] { 1 } else { 0 }),
+                    ScalarBinaryOp::CompareUnsigned(Comparison::GreaterThan)              => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| if a[c] >  b[c] { 1 } else { 0 }),
+                    ScalarBinaryOp::And                                                   => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| a[c] & b[c]),
+                    ScalarBinaryOp::AndNot                                                => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| a[c] & !b[c]),
+                    ScalarBinaryOp::Or                                                    => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| a[c] | b[c]),
+                    ScalarBinaryOp::Xor                                                   => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| a[c] ^ b[c]),
+                    ScalarBinaryOp::Add(OpDataType::I32)                                  => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_add(b[c] as i32) as u32),
+                    ScalarBinaryOp::Add(OpDataType::F32)                                  => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) + f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Subtract(OpDataType::I32)                             => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_sub(b[c] as i32) as u32),
+                    ScalarBinaryOp::Subtract(OpDataType::F32)                             => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) + f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Multiply(OpDataType::I32)                             => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_mul(b[c] as i32) as u32),
+                    ScalarBinaryOp::Multiply(OpDataType::F32)                             => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) * f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Divide(OpDataType::I32)                               => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).wrapping_div(b[c] as i32) as u32),
+                    ScalarBinaryOp::Divide(OpDataType::F32)                               => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) / f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Modulo(OpDataType::I32)                               => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| (a[c] as i32).rem(b[c] as i32) as u32),
+                    ScalarBinaryOp::Modulo(OpDataType::F32)                               => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(a[c]).rem(f32::from_bits(b[c])).to_bits()),
+                    ScalarBinaryOp::Atan2                                                 => |a: [u32; 4], b: [u32; 4]| [0, 1, 2, 3].map(|c| f32::atan2(f32::from_bits(a[c]), f32::from_bits(b[c])).to_bits()),
                 };
                 match (from_a_register, from_b_register) {
                     (RegisterRead::Core(from_a_reg_list), RegisterRead::Core(from_b_reg_list)) => 
@@ -1463,23 +1676,12 @@ impl ShadingUnitContext {
                     }
                 }
             },
-            ShaderInstruction::VectorComponentwiseScalarBinaryOpMasked { src_a, src_b, dst, op, mask } => {
-                todo!()
-            },
-            ShaderInstruction::VectorComponentwiseScalarTernaryOpMasked { src_a, src_b, src_c, dst, op, mask } => {
-                todo!()
-            },
-            ShaderInstruction::VectorToVectorUnaryOp { src, dst, op } => {
-                todo!()
-            },
-            ShaderInstruction::VectorToScalarUnaryOp { src, dst, op } => {
-                todo!()
-            },
+            _ => panic!("GPU: Unimplemented shader instruction: {:?}", instruction),
         }
         Some(())
     }
 
-    fn read_scalar_register<'i, 'o>(&self, address: RegisterAddress<Scalar>, run_context: &mut ShadingUnitRunContext<'i, 'o>) -> RegisterRead<'static, u32> {
+    fn read_scalar_register<'io>(&self, address: RegisterAddress<Scalar>, run_context: &mut ShadingUnitRunContext<'io>) -> RegisterRead<'static, u32> {
         {
             let read_ref = match address {
                 RegisterAddress::Constant(index, ..) => RegisterRead::Uniform(&run_context.scalar_constant_array[index as usize]),
@@ -1491,7 +1693,7 @@ impl ShadingUnitContext {
         }.to_ref()
     }
 
-    fn read_vector_register<'i, 'o>(&self, address: RegisterAddress<Vector>, run_context: &mut ShadingUnitRunContext<'i, 'o>) -> RegisterRead<'static, [u32; 4]> { 
+    fn read_vector_register<'io>(&self, address: RegisterAddress<Vector>, run_context: &mut ShadingUnitRunContext<'io>) -> RegisterRead<'static, [u32; 4]> { 
         {
             let read_ref = match address {
                 RegisterAddress::Constant(index, ..) => RegisterRead::Uniform(&run_context.vector_constant_array[index as usize]),
@@ -1503,7 +1705,7 @@ impl ShadingUnitContext {
         }.to_ref()
     }
 
-    fn write_vector_register<'i, 'o>(&mut self, address: RegisterAddress<Vector>, run_context: &mut ShadingUnitRunContext<'i, 'o>) -> Option<&'static mut [[u32; 4]; CORE_COUNT]> {
+    fn write_vector_register<'io>(&mut self, address: RegisterAddress<Vector>, run_context: &mut ShadingUnitRunContext<'io>) -> Option<&'static mut [[u32; 4]; CORE_COUNT]> {
         let register_ptr = {
             let register_ref = match address {
                 RegisterAddress::Local(index, ..) => Some(&mut self.vector_locals[index as usize]),
@@ -1515,7 +1717,7 @@ impl ShadingUnitContext {
         register_ptr.map(|r| unsafe { &mut *r })
     }
 
-    fn write_scalar_register<'i, 'o>(&mut self, address: RegisterAddress<Scalar>, run_context: &mut ShadingUnitRunContext<'i, 'o>) -> Option<&'static mut [u32; CORE_COUNT]> {
+    fn write_scalar_register<'io>(&mut self, address: RegisterAddress<Scalar>, run_context: &mut ShadingUnitRunContext<'io>) -> Option<&'static mut [u32; CORE_COUNT]> {
         let register_ptr = {
             let register_ref = match address {
                 RegisterAddress::Local(index, ..) => Some(&mut self.scalar_locals[index as usize]),
@@ -1528,7 +1730,7 @@ impl ShadingUnitContext {
     }
 }
 
-fn read_bytes_u8(bytes: &[u8], offset: usize) -> u8 {
+pub(crate) fn read_bytes_u8(bytes: &[u8], offset: usize) -> u8 {
     if offset >= bytes.len() {
         0
     } else {
@@ -1536,7 +1738,7 @@ fn read_bytes_u8(bytes: &[u8], offset: usize) -> u8 {
     }
 }
 
-fn read_bytes_u16(bytes: &[u8], offset: usize) -> u16 {
+pub(crate) fn read_bytes_u16(bytes: &[u8], offset: usize) -> u16 {
     if offset + 2 > bytes.len() {
         0
     } else {
@@ -1545,7 +1747,7 @@ fn read_bytes_u16(bytes: &[u8], offset: usize) -> u16 {
     }
 }
 
-fn read_bytes_u32(bytes: &[u8], offset: usize) -> u32 {
+pub(crate) fn read_bytes_u32(bytes: &[u8], offset: usize) -> u32 {
     if offset + 4 > bytes.len() {
         0
     } else {
