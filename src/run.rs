@@ -29,7 +29,7 @@ fn run_hart_clocked(hart_id: usize, mut hart: Hart) {
             },
             ClockEvent::Cycles(cycles) => {
                 let mut elapsed_cycles = 0;
-                for i in 0..cycles {
+                for _i in 0..cycles {
                     match hart.single_step::<false>() {
                         StepState::Run => {
                             elapsed_cycles += 1;

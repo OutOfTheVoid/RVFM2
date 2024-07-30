@@ -1,0 +1,4 @@
+entry_v
+    mov vertex_position, vin_0
+    mov vout_0, vconst_0
+

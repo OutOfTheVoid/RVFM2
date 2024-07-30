@@ -5,8 +5,11 @@ mod texture;
 mod buffer;
 mod shader;
 mod vertex_shader;
+mod fragment_shader;
+mod rasterizer;
+mod shader_parser;
 
-use std::{sync::{mpsc::{self, Receiver, TryRecvError}, Arc}};
+use std::sync::{mpsc::{self, Receiver, TryRecvError}, Arc};
 use parking_lot::Mutex;
 use static_init::dynamic;
 use crate::{machine::{ReadResult, WriteResult}, pointer_queue::PointerQueue, ui::main_window::MainWindow};
