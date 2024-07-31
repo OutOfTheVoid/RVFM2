@@ -3,12 +3,15 @@ use std::sync::Arc;
 
 use bytemuck::{Pod, cast_slice, cast_slice_mut};
 
+use crate::gpu::shader_parser::{self, parse_shader_bytecode, ShaderParseError};
 use crate::interrupt_controller::{INTERRUPT_CONTROLLER, InterruptType};
 use crate::machine::Machine;
 use crate::ui::main_window::MainWindow;
 use crate::command_list::{CommandList, retire_commandlist};
 
 use super::command::Command;
+use super::pipeline_state::GraphicsPipelineState;
+use super::shader::{ShaderModule, ShaderType};
 use super::texture::*;
 use super::buffer::*;
 use super::types::{ConstantSampler, VideoMode, PixelDataLayout, ImageDataLayout, PixelDataType, ColorBlendOp, AlphaBlendOp};
@@ -16,9 +19,11 @@ use super::types::{ConstantSampler, VideoMode, PixelDataLayout, ImageDataLayout,
 pub struct Core {
     command_lists:     Vec<CommandList>,
     video_mode:        VideoMode,
-    constant_samplers: [ConstantSampler; 64],
-    textures:          [TextureModule;   64],
-    buffers:           [BufferModule;   256],
+    constant_samplers: [ConstantSampler;       64],
+    textures:          [TextureModule;         64],
+    buffers:           [BufferModule;         256],
+    shaders:           [ShaderModule;         128],
+    graphics_states:   [GraphicsPipelineState; 32],
 }
 
 impl Core {
@@ -29,6 +34,8 @@ impl Core {
             constant_samplers: [(); 64].map(|_| ConstantSampler::new()),
             textures: [(); 64].map(|_| TextureModule::new()),
             buffers: [(); 256].map(|_| BufferModule::new()),
+            shaders: [(); 128].map(|_| ShaderModule::default()),
+            graphics_states: [(); 32].map(|_| GraphicsPipelineState::default()),
         }
     }
 
@@ -83,6 +90,10 @@ impl Core {
                 self.cutout_blit(src_tex, dst_tex, src_x, src_y, dst_x, dst_y, width, height, pixel_type),
             Command::DrawBlendedRect { src_tex, dst_tex, src_x, src_y, dst_x, dst_y, width, height, src_pixel_type, dst_pixel_type, color_blend_op, alpha_blend_op } =>
                 self.draw_blended_rect(src_tex, dst_tex, src_x, src_y, dst_x, dst_y, width, height, src_pixel_type, dst_pixel_type, color_blend_op, alpha_blend_op),
+            Command::UploadShader { size, index, kind, address } =>
+                self.upload_shader(index, kind, size, address, machine),
+            Command::UploadGraphicsPipelineState { index, flags, address } =>
+                self.upload_graphics_pipeline_state(index, flags, address, machine)
         }
     }
 
@@ -363,12 +374,12 @@ impl Core {
     }
     
     fn draw_blended_rect_color<const N_SRC: usize, const N_DST: usize, F: Fn(&[u8; N_SRC], &mut [u8; N_DST])>(&mut self, src_tex: u8, dst_tex: u8, src_x: u16, src_y: u16, dst_x: u16, dst_y: u16, width: u16, height: u16, color_blend_op: ColorBlendOp) {
-        
+        todo!()
     }
 
     fn draw_blended_rect_internal<const N_SRC: usize, const N_DST: usize, F: Fn(&[u8; N_SRC], &mut [u8; N_DST])>(src_tex: &TextureModule, dst_tex: &mut TextureModule, mut src_x: u16, mut src_y: u16, mut dst_x: u16, mut dst_y: u16, mut width: u16, mut height: u16, blend_fn: F)
         where [u8; N_SRC]: Pod, [u8; N_DST]: Pod {
-        println!("draw_blended_rect_internal::<N_SRC: {N_SRC}, N_DST: {N_DST}> src config: {:?}, dst config: {:?}", src_tex.config, dst_tex.config);
+        println!("    GPU::draw_blended_rect_internal::<N_SRC: {N_SRC}, N_DST: {N_DST}>(): src config: {:?}, dst config: {:?}", src_tex.config, dst_tex.config);
         if src_x >= src_tex.config.width || src_y >= src_tex.config.width || dst_x >= dst_tex.config.width || dst_y >= dst_tex.config.height {
             return;
         }
@@ -382,6 +393,36 @@ impl Core {
                 let dst_bytes = &mut dst_pixels[((y + dst_y as u32) * src_tex.config.width as u32 + x + dst_x as u32) as usize];
                 blend_fn(src_bytes, dst_bytes);
             }
+        }
+    }
+
+    fn upload_shader(&mut self, index: u8, kind: ShaderType, size: u16, address: u32, machine: &Arc<Machine>) {
+        println!("GPU: upload_shader(index: {}, kind: {:?}, size: {}, address: {:08X})", index, kind, size, address);
+        let mut bytes = vec![0u8; size as usize].into_boxed_slice();
+        match machine.read_block(address, &mut bytes) {
+            crate::machine::ReadResult::Ok(_) => {},
+            crate::machine::ReadResult::InvalidAddress => return,
+        };
+        let module = &mut self.shaders[(index & 0x7F) as usize];
+        match parse_shader_bytecode(kind, &bytes[..], module) {
+            Ok(()) => {
+                println!("Shader parsed! Opcodes:");
+                println!("");
+                for i in 0..module.instruction_count {
+                    println!("    {:?}", module.instruction_buffer[i]);
+                }
+            },
+            Err(e) => println!("Shader bytecode parse failed: {:?}", e)
+        }
+    }
+
+    fn upload_graphics_pipeline_state(&mut self, index: u8, flags: u8, address: u32, machine: &Arc<Machine>) {
+        println!("GPU: upload_shader(index: {}, flags: {:b}, address: {:08X}", index, flags, address);
+        if let Some(state) = GraphicsPipelineState::read_from_address(address, machine) {
+            println!("Pipeline state: {:?}", state);
+            self.graphics_states[index as usize] = state;
+        } else {
+            println!("Pipeline state upload failed");
         }
     }
 }

@@ -2,3 +2,6 @@ entry_v
     mov vertex_position, vin_0
     mov vout_0, vconst_0
 
+entry_f
+    push vin_0
+    pop vout_0

@@ -1,6 +1,6 @@
 use bytemuck::cast_slice_mut;
 
-use super::types::*;
+use super::{shader::ShaderType, types::*};
 use crate::command_list::CommandList;
 
 pub enum Command {
@@ -123,7 +123,26 @@ pub enum Command {
         dst_pixel_type: PixelDataType,
         color_blend_op: ColorBlendOp,
         alpha_blend_op: AlphaBlendOp,
-    }
+    },
+    /*
+    upload_shader < size  >  < address     >     ..    <index> <kind>
+    [     0C 00 ] [ SS SS ]  [ AA AA AA AA ] [ 00 00 ] [  II ] [ KK ]
+    */
+    UploadShader {
+        size: u16,
+        index: u8,
+        kind: ShaderType,
+        address: u32,
+    },
+    /*
+    upload_graphics_pipeline_state <index> <flags> < address     >
+    [                      0D 00 ] [  II ] [  FF ] [ AA AA AA AA ]
+    */
+    UploadGraphicsPipelineState {
+        index: u8,
+        flags: u8,
+        address: u32,
+    },
 }
 
 impl Command {
@@ -246,10 +265,19 @@ impl Command {
                 Some((offset + 20, Command::DrawBlendedRect { src_tex, dst_tex, src_x, src_y, dst_x, dst_y, width, height, src_pixel_type, dst_pixel_type, color_blend_op, alpha_blend_op }))
             },
             Some(0x00_0C) => {
-                None
+                let size = command_list.read_u16(offset + 2)?;
+                let address = command_list.read_u32(offset + 4)?;
+                let index = command_list.read_u8(offset + 10)?;
+                let kind = command_list.read_u8(offset + 11)?;
+                let kind = ShaderType::from_u8(kind)?;
+                Some((offset + 12, Command::UploadShader { size, index, kind, address }))
             },
             Some(0x00_0D) => {
-                None
+                let index = command_list.read_u8(offset + 2)?;
+                let flags = command_list.read_u8(offset + 3)?;
+                let address = command_list.read_u32(offset + 4)?;
+                println!("address: {:08X}", address);
+                Some((offset + 8, Command::UploadGraphicsPipelineState { index, flags, address }))
             },
             Some(0x00_0E) => {
                 None

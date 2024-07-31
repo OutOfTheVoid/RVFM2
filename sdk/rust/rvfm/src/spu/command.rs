@@ -2,8 +2,6 @@ use crate::command_list::*;
 
 pub struct SpuCommands;
 
-use crate::completion::Completion;
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum SpuQueue {
     Queue0 = 0,
@@ -59,8 +57,10 @@ impl SpuCommandBuilderExt for CommandListBuilder<'_, SpuCommands> {
 }
 
 impl SpuQueue {
-    pub fn submit<'a, 'b: 'a>(&self, command_list: CommandList<'a, SpuCommands>, completion: &Completion) {
-        command_list.0[4..8].copy_from_slice(&command_u32_bytes(completion.0 as *const u32 as usize as u32));
+    pub fn submit<'l, 'c: 'l>(&self, command_list: CommandList<'l, SpuCommands>, completion: &'c mut u32) -> CommandListCompletion<'c> {
+        unsafe { (completion as *mut u32).write_volatile(0); }
+        command_list.0[4..8].copy_from_slice(&command_u32_bytes(completion as *mut u32 as usize as u32));
         unsafe { ((0x08004_0010 + ((*self as u32) << 2)) as usize as *mut u32).write_volatile(command_list.0.as_ptr() as usize as u32); }
+        CommandListCompletion(completion)
     }
 }

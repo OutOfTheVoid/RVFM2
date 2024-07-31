@@ -1,5 +1,5 @@
 use crate::command_list::*;
-use crate::completion::*;
+use super::pipeline_state::GraphicsPipelineState;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VideoResolution {
@@ -36,7 +36,7 @@ pub struct TextureConfig {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum PixelDataType {
+pub enum PixelDataType {
     RUNorm8 = 0,
     RgUNorm8 = 1,
     RgbUNorm8 = 2,
@@ -47,24 +47,34 @@ enum PixelDataType {
     RgbaF32 = 7,
 }
 
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ShaderKind {
+    Vertex = 0,
+    Fragment = 1,
+    Compute = 2,
+}
+
 pub struct GpuCommands;
 
-pub trait GpuCommandBuilderExt: Sized {
+pub trait GpuCommandBuilderExt<'b>: Sized {
     fn clear_texture(self, texture: u8, constant_sampler: u8) -> Result<Self, ()>;
-    fn present_texture<'a>(self, texture: u8, completion: &Completion, interrupt: bool) -> Result<Self, ()>;
+    fn present_texture<'c: 'b>(self, texture: u8, completion: &'c mut u32, interrupt: bool) -> Result<(Self, CommandListCompletion<'c>), ()>;
     fn set_constant_sampler_f32(self, constant_sampler: u8, color: [f32; 4]) -> Result<Self, ()>;
     fn set_constant_sampler_unorm8(self, constant_sampler: u8, color: [u8; 4]) -> Result<Self, ()>;
     fn set_video_mode(self, resolution: VideoResolution, backgrounds: bool, sprites: bool, triangles: bool) -> Result<Self, ()>;
     fn write_flag(self, flag_address: u32, value: u32, interrupt: bool) -> Result<Self, ()>;
-    fn configure_textre(self, texture: u8, config: &TextureConfig) -> Result<Self, ()>;
+    fn configure_texture(self, texture: u8, config: &TextureConfig) -> Result<Self, ()>;
     fn upload_texture(self, texture: u8, texture_data_layout: ImageDataLayout, texture_data: *const u8) -> Result<Self, ()>;
     fn configure_buffer(self, buffer: u8, length: u32) -> Result<Self, ()>;
     fn upload_buffer(self, buffer: u8, data: *const u8) -> Result<Self, ()>;
     fn direct_blit(self, src_tex: u8, dst_tex: u8, src_x: u16, src_y: u16, dst_x: u16, dst_y: u16, width: u16, height: u16) -> Result<Self, ()>;
     fn cutout_blit(self, src_x: u8, src_y: u8, src_x: u16, src_y: u16, dst_x: u16, dst_y: u16, width: u16, height: u16, src_alpha_data_type: PixelDataType) -> Result<Self, ()>;
+    fn upload_shader(self, index: u8, kind: ShaderKind, shader_code: &'static [u8]) -> Result<Self, ()>;
+    fn upload_graphics_pipeline_state(self, index: u8, /*flags: u8, */state: &'static GraphicsPipelineState) -> Result<Self, ()>;
 }
 
-impl GpuCommandBuilderExt for CommandListBuilder<'_, GpuCommands> {
+impl<'a> GpuCommandBuilderExt<'a> for CommandListBuilder<'a, GpuCommands> {
     fn clear_texture(self, texture: u8, constant_sampler: u8) -> Result<Self, ()> {
         let data = &[
             0x00,
@@ -75,8 +85,8 @@ impl GpuCommandBuilderExt for CommandListBuilder<'_, GpuCommands> {
         self.push_command(data)
     }
 
-    fn present_texture(self, texture: u8, completion: &Completion, interrupt: bool) -> Result<Self, ()> {
-        let completion_flag_bytes = command_u32_bytes(&completion.0 as *const _ as usize as u32);
+    fn present_texture<'c: 'a>(self, texture: u8, completion: &'c mut u32, interrupt: bool) -> Result<(Self, CommandListCompletion<'c>), ()> {
+        let completion_flag_bytes = command_u32_bytes(completion as *mut _ as usize as u32);
         let data = &[
             0x01,
             0x00,
@@ -87,7 +97,7 @@ impl GpuCommandBuilderExt for CommandListBuilder<'_, GpuCommands> {
             completion_flag_bytes[2],
             completion_flag_bytes[3],
         ];
-        self.push_command(data)
+        self.push_command(data).map(|builder| (builder, CommandListCompletion(completion)))
     }
 
     fn set_constant_sampler_f32(self, constant_sampler: u8, color: [f32; 4]) -> Result<Self, ()> {
@@ -176,7 +186,7 @@ impl GpuCommandBuilderExt for CommandListBuilder<'_, GpuCommands> {
         self.push_command(data)
     }
 
-    fn configure_textre(self, texture: u8, config: &TextureConfig) -> Result<Self, ()> {
+    fn configure_texture(self, texture: u8, config: &TextureConfig) -> Result<Self, ()> {
         let width_bytes  = command_u16_bytes(config.width);
         let height_bytes = command_u16_bytes(config.height);
         let data = &[
@@ -300,11 +310,49 @@ impl GpuCommandBuilderExt for CommandListBuilder<'_, GpuCommands> {
         ];
         self.push_command(data)
     }
+
+    fn upload_shader(self, index: u8, kind: ShaderKind, shader_code: &'static [u8]) -> Result<Self, ()> {
+        let size_bytes = command_u16_bytes(shader_code.len() as u16);
+        let address_bytes = command_u32_bytes(shader_code.as_ptr() as usize as u32);
+        let data = &[
+            0x0C,
+            0x00,
+            size_bytes[0],
+            size_bytes[1],
+            address_bytes[0],
+            address_bytes[1],
+            address_bytes[2],
+            address_bytes[3],
+            0x00,
+            0x00,
+            index,
+            kind as u8
+        ];
+        self.push_command(data)
+    }
+
+    fn upload_graphics_pipeline_state(self, index: u8, /*flags: u8, */state: &'static GraphicsPipelineState) -> Result<Self, ()> {
+        let flags = 0u8;
+        let state_address_bytes = command_u32_bytes(state as *const _ as usize as u32);
+        let data = &[
+            0x0D,
+            0x00,
+            index,
+            flags,
+            state_address_bytes[0],
+            state_address_bytes[1],
+            state_address_bytes[2],
+            state_address_bytes[3],
+        ];
+        self.push_command(data)
+    }
 }
 
 const GPU_COMMANDLIST_SUBMISSION_PORT: usize = 0x80010000;
 
-pub fn gpu_submit<'a>(command_list: CommandList<'a, GpuCommands>, completion: &Completion) {
-    command_list.0[4..8].copy_from_slice(&command_u32_bytes(completion.0 as *const u32 as usize as u32));
+pub fn gpu_submit<'a, 'c: 'a>(command_list: CommandList<'a, GpuCommands>, completion: &'c mut u32) -> CommandListCompletion<'c> {
+    unsafe { (completion as *mut u32).write_volatile(0) };
+    command_list.0[4..8].copy_from_slice(&command_u32_bytes(completion as *mut u32 as usize as u32));
     unsafe { core::ptr::write(GPU_COMMANDLIST_SUBMISSION_PORT as * mut u32, command_list.0.as_ptr() as usize as u32); }
+    CommandListCompletion(completion)
 }

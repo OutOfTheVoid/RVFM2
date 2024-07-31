@@ -11,6 +11,19 @@ pub enum Interpolation {
     Min,
 }
 
+impl Interpolation {
+    pub fn from_u8(x: u8) -> Option<Self> {
+        Some(match x {
+            0 => Interpolation::ProvokingVertexFlat,
+            1 => Interpolation::Linear,
+            2 => Interpolation::Smooth,
+            3 => Interpolation::Max,
+            4 => Interpolation::Min,
+            _ => None?
+        })
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ShaderVaryingType {
     F32   (Interpolation),
@@ -23,15 +36,33 @@ pub enum ShaderVaryingType {
     I32x4 (Interpolation),
 }
 
+impl ShaderVaryingType {
+    pub fn from_u8(x: u8, interpolation: Interpolation) -> Option<Self> {
+        Some(match x {
+            0 => Self::F32   (interpolation),
+            1 => Self::F32x2 (interpolation),
+            2 => Self::F32x3 (interpolation),
+            3 => Self::F32x4 (interpolation),
+            4 => Self::I32   (interpolation),
+            5 => Self::I32x2 (interpolation),
+            6 => Self::I32x3 (interpolation),
+            7 => Self::I32x4 (interpolation),
+            _ => None?
+        })
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct RasterizerVaryingAssignment {
     pub slot: u8,
     pub t: ShaderVaryingType,
 }
 
+#[derive(Debug, Clone, Default)]
 pub struct RasterizerState {
     pub varyings: Vec<RasterizerVaryingAssignment>,
     pub constants: Vec<ShaderConstantAssignment>,
+    pub resource_map: ResourceMap,
 }
 
 pub struct RasterRect {
@@ -45,6 +76,7 @@ pub struct RasterizerCall<'a> {
 
     pub buffer_modules           :  &'a mut [BufferModule; 256],
     pub texture_modules          :  &'a mut [TextureModule; 64],
+    pub shader_modules           :  &'a [ShaderModule; 128],
 
     pub vertex_count             : usize,
 
@@ -52,19 +84,21 @@ pub struct RasterizerCall<'a> {
 
     pub state                    : &'a RasterizerState,
 
-    pub vertex_shader            : &'a [ShaderInstruction],
+    pub vertex_shader            : u8,
     pub vertex_state             : &'a VertexState,
 
-    pub fragment_shader          : &'a [ShaderInstruction],
+    pub fragment_shader          : u8,
     pub fragment_state           : &'a FragmentState,
 
     pub target_rect              : RasterRect,
+
+    pub resource_map             : &'a ResourceMap,
 }
 
 const TILE_SIZE: u32 = 32;
 
 fn run_rasterizer(mut call: RasterizerCall<'_>) {
-    setup_shader_constants(call.constant_array, &call.state.constants[..], call.buffer_modules);
+    setup_shader_constants(call.constant_array, &call.state.constants[..], &call.state.resource_map, call.buffer_modules);
 
     let mut vertex_count = call.vertex_count;
     let mut vertex_offset = 0;
@@ -89,10 +123,20 @@ fn run_rasterizer(mut call: RasterizerCall<'_>) {
                 shading_unit_run_context: vertex_run_context,
                 buffer_modules: &mut *(call.buffer_modules as *mut _),
                 texture_modules: &mut *(call.texture_modules as *mut _),
+                resource_map: call.resource_map,
+                shader_modules: & *(call.shader_modules as *const _),
             } };
-            let shader_result = run_vertex_shader(vertex_call);
-            vertex_count -= shader_result.remaining_count;
-            vertex_offset += shader_result.remaining_offset;
+            let shader_result = match run_vertex_shader(vertex_call) {
+                Ok(result) => {
+                    vertex_count -= result.remaining_count;
+                    vertex_offset += result.remaining_offset;
+                },
+                Err(e) => {
+                    println!("ERROR: {:?}", e);
+                    return
+                },
+            };
+            
         }
 
         let target_rect_width = call.target_rect.lower_right.0 - call.target_rect.upper_left.0;
@@ -208,6 +252,8 @@ fn invoke_fragment_shader(invocation_count: usize, call: &mut RasterizerCall<'_>
         shading_unit_run_context: &mut fragment_run_context,
         buffer_modules: call.buffer_modules,
         texture_modules: call.texture_modules,
+        shader_modules: call.shader_modules,
+        resource_map: call.resource_map,
     };
     run_fragment_shader(fragment_call);
 }

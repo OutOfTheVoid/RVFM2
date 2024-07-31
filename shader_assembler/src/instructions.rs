@@ -43,14 +43,18 @@ impl WriteInstructionBytes for RegisterName {
     }
 }
 
-const INSTRUCTION_VECTOR_PUSH                     : u8 = 0x00;
-const INSTRUCTION_SCALAR_PUSH                     : u8 = 0x01;
-const INSTRUCTION_VECTOR_POP                      : u8 = 0x02;
-const INSTRUCTION_SCALAR_POP                      : u8 = 0x03;
-const INSTRUCTION_VECTOR_COPY                     : u8 = 0x04;
-const INSTRUCTION_SCALAR_COPY                     : u8 = 0x05;
-const INSTRUCTION_VECTOR_COMPONENT_TO_SCALAR_COPY : u8 = 0x06;
-const INSTRUCTION_SCALAR_TO_VECTOR_COMPONENT_COPY : u8 = 0x07;
+const INSTRUCTION_VECTOR_PUSH                          : u8 = 0x00;
+const INSTRUCTION_SCALAR_PUSH                          : u8 = 0x01;
+const INSTRUCTION_VECTOR_POP                           : u8 = 0x02;
+const INSTRUCTION_SCALAR_POP                           : u8 = 0x03;
+const INSTRUCTION_VECTOR_COPY                          : u8 = 0x04;
+const INSTRUCTION_SCALAR_COPY                          : u8 = 0x05;
+const INSTRUCTION_VECTOR_COMPONENT_TO_SCALAR_COPY      : u8 = 0x06;
+const INSTRUCTION_SCALAR_TO_VECTOR_COMPONENT_COPY      : u8 = 0x07;
+const INSTRUCTION_COND_VECTOR_COPY                     : u8 = 0x04;
+const INSTRUCTION_COND_SCALAR_COPY                     : u8 = 0x05;
+const INSTRUCTION_COND_VECTOR_COMPONENT_TO_SCALAR_COPY : u8 = 0x06;
+const INSTRUCTION_COND_SCALAR_TO_VECTOR_COMPONENT_COPY : u8 = 0x07;
 
 pub fn write_push(bytes: &mut Vec<u8>, src: RegisterName, src_token: &Token, entry_type: EntryType) -> Result<(), SourceError> {
     bytes.push(if src.is_vector() { INSTRUCTION_VECTOR_PUSH } else { INSTRUCTION_SCALAR_PUSH });
@@ -152,6 +156,70 @@ pub fn write_mov(bytes: &mut Vec<u8>, mov_token: &Token, dst: RegisterName, dst_
         (true,  _,               true,  Some(component)) => {
             Err(SourceError {
                 message: format!("No mov instruction exists for two vector components"),
+                line: component.line,
+                column: component.column
+            })?
+        }
+    })
+}
+
+
+pub fn write_cmov(bytes: &mut Vec<u8>, mov_token: &Token, cond: RegisterName, dst: RegisterName, dst_component: Option<&Token>, src: RegisterName, src_component: Option<&Token>, entry_type: EntryType) -> Result<(), SourceError> {
+    Ok(match (dst.is_vector(), dst_component, src.is_vector(), src_component) {
+        (true,  None,            true,  None           ) => {
+            bytes.push(INSTRUCTION_COND_VECTOR_COPY);
+            cond.write(bytes, entry_type);
+            dst.write(bytes, entry_type);
+            src.write(bytes, entry_type);
+        },
+
+        (false, None,            false, None           ) => {
+            bytes.push(INSTRUCTION_COND_SCALAR_COPY);
+            cond.write(bytes, entry_type);
+            dst.write(bytes, entry_type);
+            src.write(bytes, entry_type);
+        },
+
+        (false, None,            true,  Some(component)) => {
+            let component = Component::from_token(component)?;
+            bytes.push(INSTRUCTION_COND_VECTOR_COMPONENT_TO_SCALAR_COPY);
+            cond.write(bytes, entry_type);
+            dst.write(bytes, entry_type);
+            src.write(bytes, entry_type);
+            component.write(bytes, entry_type);
+        },
+
+        (true,  Some(component), false, None           ) => {
+            let component = Component::from_token(component)?;
+            bytes.push(INSTRUCTION_COND_SCALAR_TO_VECTOR_COMPONENT_COPY);
+            cond.write(bytes, entry_type);
+            dst.write(bytes, entry_type);
+            component.write(bytes, entry_type);
+            src.write(bytes, entry_type);
+        },
+
+        (false, None,            true,  None           ) |
+        (true,  None,            false, None           ) => {
+            Err(SourceError {
+                message: format!("Type mismatch between dst and src"),
+                line: mov_token.line,
+                column: mov_token.column
+            })?
+        },
+
+        (false, Some(component), _,     _              ) |
+        (_,     _,               false, Some(component)) => {
+            Err(SourceError {
+                message: format!("Scalar registers don't have components"),
+                line: component.line,
+                column: component.column
+            })?
+        },
+
+        (true,  Some(component), true,  _              ) |
+        (true,  _,               true,  Some(component)) => {
+            Err(SourceError {
+                message: format!("No cmov instruction exists for two vector components"),
                 line: component.line,
                 column: component.column
             })?

@@ -71,3 +71,11 @@ make clean
 make
 popd
 
+pushd tests/hello_triangle
+echo "===================================="
+echo "making tests/hello_triangle"
+echo "===================================="
+pwd
+make clean
+make
+popd

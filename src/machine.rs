@@ -43,6 +43,13 @@ impl<T> ReadResult<T> {
             Self::InvalidAddress => default,
         }
     }
+
+    pub fn to_opt(self) -> Option<T> {
+        match self {
+            Self::Ok(x) => Some(x),
+            _ => None
+        }
+    }
 }
 
 pub struct Machine {

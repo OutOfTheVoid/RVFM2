@@ -10,7 +10,7 @@ pub struct VertexInputAssignment {
     pub c: ShaderCardinality,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct VertexState {
     pub inputs: Vec<VertexInputAssignment>,
 }
@@ -19,6 +19,11 @@ pub(crate) struct VertexState {
 pub struct VertexShaderResult {
     pub remaining_count: usize,
     pub remaining_offset: usize,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum VertexShaderError {
+    BadShader
 }
 
 pub const VERTEX_SCALAR_INPUT_BUILTIN_VERTEX_ID        : usize = 0x00;
@@ -32,7 +37,7 @@ pub const VERTEX_VECTOR_OUTPUT_BUILTIN_VERTEX_POSITION : usize = 0x00;
 pub const VERTEX_VECTOR_OUTPUT_USER_OFFSET             : usize = 0x10;
 
 pub struct VertexShaderCall<'a> {
-    pub shader        : &'a [ShaderInstruction],
+    pub shader        : u8,
     pub state         : &'a VertexState,
 
     pub vertex_count  : usize,
@@ -43,9 +48,12 @@ pub struct VertexShaderCall<'a> {
     
     pub buffer_modules  : &'a mut [BufferModule; 256],
     pub texture_modules : &'a mut [TextureModule; 64],
+    pub shader_modules: &'a [ShaderModule],
+
+    pub resource_map: &'a ResourceMap,
 }
 
-pub fn run_vertex_shader(mut call: VertexShaderCall<'_>) -> VertexShaderResult {
+pub fn run_vertex_shader(mut call: VertexShaderCall<'_>) -> Result<VertexShaderResult, VertexShaderError> {
     let invocation_count = call.vertex_count.min(CORE_COUNT);
 
     for v in 0..invocation_count {
@@ -130,16 +138,21 @@ pub fn run_vertex_shader(mut call: VertexShaderCall<'_>) -> VertexShaderResult {
         }
     }
 
-    let mut instructions = call.shader.iter();
+    let shader = &call.shader_modules[call.shader as usize];
+    if shader.shader_type != ShaderType::Vertex {
+        return Err(VertexShaderError::BadShader);
+    }
+
+    let mut instructions = shader.instruction_buffer[0..shader.instruction_count].iter();
     let mut continue_instructions = true;
     while let (Some(instruction), true) = (instructions.next(), continue_instructions) {
-        if call.shading_unit_context.run_instruction(invocation_count, instruction, &mut call.shading_unit_run_context, &mut call.buffer_modules, &mut call.texture_modules).is_none() {
+        if call.shading_unit_context.run_instruction(invocation_count, instruction, &mut call.shading_unit_run_context, &mut call.buffer_modules, &mut call.texture_modules, call.resource_map).is_none() {
             continue_instructions = false;
         }
     }
 
-    VertexShaderResult {
+    Ok(VertexShaderResult {
         remaining_count  : call.vertex_count  - invocation_count,
         remaining_offset : call.vertex_offset + invocation_count,
-    }
+    })
 }

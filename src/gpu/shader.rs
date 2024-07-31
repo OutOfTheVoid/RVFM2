@@ -7,11 +7,76 @@ use super::texture::TextureModule;
 pub trait RegisterType {}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ShaderType {
+    Vertex,
+    Fragment,
+    Compute
+}
+
+impl ShaderType {
+    pub fn from_u8(x: u8) -> Option<Self> {
+        match x {
+            0 => Some(Self::Vertex),
+            1 => Some(Self::Fragment),
+            2 => Some(Self::Compute),
+            _ => None
+        }
+    }
+}
+
+pub struct ShaderModule {
+    pub instruction_buffer: Box<[ShaderInstruction]>,
+    pub instruction_count: usize,
+    pub shader_type: ShaderType
+}
+
+#[derive(Clone, Debug)]
+pub struct ResourceMap {
+    pub texture: [u8;  64],
+    pub buffer:  [u8; 256],
+}
+
+impl Default for ResourceMap {
+    fn default() -> Self {
+        let mut value = Self {
+            texture: [0; 64],
+            buffer: [0; 256]
+        };
+        value.texture.iter_mut().enumerate().for_each(|(i, x)| *x = i as u8);
+        value.buffer.iter_mut().enumerate().for_each(|(i, x)| *x = i as u8);
+        value
+    }
+}
+
+impl Default for ShaderModule {
+    fn default() -> Self {
+        Self {
+            instruction_buffer: vec![ShaderInstruction::Nop; 1024].into_boxed_slice(),
+            instruction_count: 0,
+            shader_type: ShaderType::Vertex,
+        }
+    }
+}
+
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ShaderCardinality {
     Scalar,
     V2,
     V3,
     V4
+}
+
+impl ShaderCardinality {
+    pub fn from_u8(x: u8) -> Option<ShaderCardinality> {
+        Some(match x {
+            0 => ShaderCardinality::Scalar,
+            1 => ShaderCardinality::V2,
+            2 => ShaderCardinality::V3,
+            3 => ShaderCardinality::V4,
+            _ => None?
+        })
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -37,9 +102,36 @@ pub enum ShaderInputType {
     F32FromF32,
 }
 
+impl ShaderInputType {
+    pub fn from_u8(x: u8) -> Option<Self> {
+        Some(match x {
+            0x00 => Self::UIntFromU8,
+            0x01 => Self::UIntFromU16,
+            0x02 => Self::UIntFromU32,
+            0x03 => Self::IntFromI8,
+            0x04 => Self::IntFromI16,
+            0x05 => Self::IntFromI32,
+            0x06 => Self::F32FromU8,
+            0x07 => Self::F32FromU16,
+            0x08 => Self::F32FromU32,
+            0x09 => Self::F32FromI8,
+            0x0A => Self::F32FromI16,
+            0x0B => Self::F32FromI32,
+            0x0C => Self::F32FromUNorm8,
+            0x0D => Self::F32FromUNorm16,
+            0x0E => Self::F32FromUNorm32,
+            0x0F => Self::F32FromINorm8,
+            0x10 => Self::F32FromINorm16,
+            0x11 => Self::F32FromINorm32,
+            0x12 => Self::F32FromF32,
+            _ => None?
+        })
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ShaderConstantAssignment {
-    pub vertex_constant: u8,
+    pub constant: u8,
     pub source_buffer: u8,
     pub offset: u32,
     pub t: ShaderInputType,
@@ -219,7 +311,7 @@ const COMPONENT_MASK_Y: u8 = 2;
 const COMPONENT_MASK_Z: u8 = 4;
 const COMPONENT_MASK_W: u8 = 8;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ShaderInstruction {
     PushVector(RegisterAddress<Vector>),
     PushScalar(RegisterAddress<Scalar>),
@@ -266,6 +358,13 @@ pub enum ShaderInstruction {
         to: RegisterAddress<Vector>
     },
     CopyScalarToVectorComponentsMasked {
+        channel: VectorChannel,
+        from: RegisterAddress<Scalar>,
+        to: RegisterAddress<Vector>,
+        mask: u8
+    },
+    ConditionallyCopyScalarToVectorComponentsMasked {
+        cond: RegisterAddress<Scalar>,
         channel: VectorChannel,
         from: RegisterAddress<Scalar>,
         to: RegisterAddress<Vector>,
@@ -388,6 +487,7 @@ pub enum ShaderInstruction {
         dst: RegisterAddress<Scalar>,
         op: VectorToScalarUnaryOp
     },
+    Nop,
 }
 
 pub const CORE_COUNT: usize = 0x1000;
@@ -432,9 +532,10 @@ impl ShadingUnitIOArray {
     }
 }
 
-pub fn setup_shader_constants<'a>(constant_array: &'a mut ShadingUnitConstantArray, constants: &[ShaderConstantAssignment], buffer_modules: &mut [BufferModule; 256]) {
+pub fn setup_shader_constants<'a>(constant_array: &'a mut ShadingUnitConstantArray, constants: &[ShaderConstantAssignment], resource_map: &ResourceMap, buffer_modules: &mut [BufferModule; 256]) {
     for constant_assignment in constants.iter() {
-        let bytes = buffer_modules[constant_assignment.source_buffer as usize].bytes();
+        let buffer_index = resource_map.buffer[constant_assignment.source_buffer as usize] as usize;
+        let bytes = buffer_modules[buffer_index].bytes();
         let read_fn = match constant_assignment.t {
             ShaderInputType::UIntFromU8     => |bytes: &[u8], offset: usize|  read_bytes_u8 (bytes, offset) as u32                                         ,
             ShaderInputType::UIntFromU16    => |bytes: &[u8], offset: usize|  read_bytes_u16(bytes, offset) as u32                                         ,
@@ -479,22 +580,22 @@ pub fn setup_shader_constants<'a>(constant_array: &'a mut ShadingUnitConstantArr
         };
         let value = match constant_assignment.c {
             ShaderCardinality::Scalar => {
-                constant_array.scalar_constant_array[constant_assignment.vertex_constant as usize] = read_fn(bytes, constant_assignment.offset as usize);
+                constant_array.scalar_constant_array[constant_assignment.constant as usize] = read_fn(bytes, constant_assignment.offset as usize);
             },
             ShaderCardinality::V2 => {
-                constant_array.vector_constant_array[constant_assignment.vertex_constant as usize][0] = read_fn(bytes, constant_assignment.offset as usize + element_size * 0);
-                constant_array.vector_constant_array[constant_assignment.vertex_constant as usize][1] = read_fn(bytes, constant_assignment.offset as usize + element_size * 1);
+                constant_array.vector_constant_array[constant_assignment.constant as usize][0] = read_fn(bytes, constant_assignment.offset as usize + element_size * 0);
+                constant_array.vector_constant_array[constant_assignment.constant as usize][1] = read_fn(bytes, constant_assignment.offset as usize + element_size * 1);
             },
             ShaderCardinality::V3 => {
-                constant_array.vector_constant_array[constant_assignment.vertex_constant as usize][0] = read_fn(bytes, constant_assignment.offset as usize + element_size * 0);
-                constant_array.vector_constant_array[constant_assignment.vertex_constant as usize][1] = read_fn(bytes, constant_assignment.offset as usize + element_size * 1);
-                constant_array.vector_constant_array[constant_assignment.vertex_constant as usize][2] = read_fn(bytes, constant_assignment.offset as usize + element_size * 2);
+                constant_array.vector_constant_array[constant_assignment.constant as usize][0] = read_fn(bytes, constant_assignment.offset as usize + element_size * 0);
+                constant_array.vector_constant_array[constant_assignment.constant as usize][1] = read_fn(bytes, constant_assignment.offset as usize + element_size * 1);
+                constant_array.vector_constant_array[constant_assignment.constant as usize][2] = read_fn(bytes, constant_assignment.offset as usize + element_size * 2);
             },
             ShaderCardinality::V4 => {
-                constant_array.vector_constant_array[constant_assignment.vertex_constant as usize][0] = read_fn(bytes, constant_assignment.offset as usize + element_size * 0);
-                constant_array.vector_constant_array[constant_assignment.vertex_constant as usize][1] = read_fn(bytes, constant_assignment.offset as usize + element_size * 1);
-                constant_array.vector_constant_array[constant_assignment.vertex_constant as usize][2] = read_fn(bytes, constant_assignment.offset as usize + element_size * 2);
-                constant_array.vector_constant_array[constant_assignment.vertex_constant as usize][3] = read_fn(bytes, constant_assignment.offset as usize + element_size * 3);
+                constant_array.vector_constant_array[constant_assignment.constant as usize][0] = read_fn(bytes, constant_assignment.offset as usize + element_size * 0);
+                constant_array.vector_constant_array[constant_assignment.constant as usize][1] = read_fn(bytes, constant_assignment.offset as usize + element_size * 1);
+                constant_array.vector_constant_array[constant_assignment.constant as usize][2] = read_fn(bytes, constant_assignment.offset as usize + element_size * 2);
+                constant_array.vector_constant_array[constant_assignment.constant as usize][3] = read_fn(bytes, constant_assignment.offset as usize + element_size * 3);
             },
         };
     }
@@ -573,8 +674,9 @@ impl ShadingUnitContext {
         })
     }
 
-    pub fn run_instruction<'io, 'rc>(&mut self, n: usize, instruction: &ShaderInstruction, run_context: &'rc mut ShadingUnitRunContext<'io>, buffer_modules: &mut [BufferModule; 256], texture_modules: &mut [TextureModule; 64]) -> Option<()> {
+    pub fn run_instruction<'io, 'rc>(&mut self, n: usize, instruction: &ShaderInstruction, run_context: &'rc mut ShadingUnitRunContext<'io>, buffer_modules: &mut [BufferModule; 256], texture_modules: &mut [TextureModule; 64], resource_map: &ResourceMap) -> Option<()> {
         match instruction {
+            ShaderInstruction::Nop => {},
             ShaderInstruction::PushVector(register) => {
                 let source_register = self.read_vector_register(*register, run_context);
                 let stack_slot = &mut self.vector_stack_array[self.vector_stack_size];
@@ -769,7 +871,8 @@ impl ShadingUnitContext {
                 }
             },
             ShaderInstruction::ReadBufferToVector { data_type, vector, offset, addr_src_u32, buffer } => {
-                let buffer = &buffer_modules[*buffer as usize];
+                let buffer_number = resource_map.buffer[*buffer as usize] as usize;
+                let buffer = &buffer_modules[buffer_number];
                 let buffer_bytes = buffer.bytes();
                 let vector_register = self.write_vector_register(*vector, run_context)?;
                 let read_fn = match data_type {
@@ -879,7 +982,8 @@ impl ShadingUnitContext {
                 }
             },
             ShaderInstruction::WriteVectorToBuffer{ data_type, src, offset, addr_src_u32, buffer } => {
-                let buffer = &mut buffer_modules[*buffer as usize];
+                let buffer_number = resource_map.buffer[*buffer as usize] as usize;
+                let buffer = &mut buffer_modules[buffer_number];
                 let bytes = buffer.bytes_mut();
                 let from_register = self.read_vector_register(*src, run_context);
                 let write_fn = match *data_type {
@@ -1013,7 +1117,8 @@ impl ShadingUnitContext {
                 }
             },
             ShaderInstruction::ReadBufferToScalar { data_type, scalar, offset, addr_src_u32, buffer } => {
-                let buffer = &buffer_modules[*buffer as usize];
+                let buffer_number = resource_map.buffer[*buffer as usize] as usize;
+                let buffer = &buffer_modules[buffer_number];
                 let bytes = buffer.bytes();
                 let read_fn = match data_type {
                     BufferReadType::D8  => |bytes: &[u8], offset: usize| read_bytes_u8(bytes, offset) as u32,
@@ -1042,7 +1147,8 @@ impl ShadingUnitContext {
                 }
             },
             ShaderInstruction::WriteScalarToBuffer { data_type, scalar, offset, addr_dst_u32, buffer } => {
-                let buffer = &mut buffer_modules[*buffer as usize];
+                let buffer_number = resource_map.buffer[*buffer as usize] as usize;
+                let buffer = &mut buffer_modules[buffer_number];
                 let bytes = buffer.bytes_mut();
                 let from_register = self.read_scalar_register(*scalar, run_context);
                 let write_fn = match *data_type {
@@ -1086,7 +1192,8 @@ impl ShadingUnitContext {
                 }
             },
             ShaderInstruction::LoadTextureVector { src_xy_u32, load_type, dst, texture } => {
-                let texture = &texture_modules[*texture as usize];
+                let texture_number = resource_map.texture[*texture as usize] as usize;
+                let texture = &texture_modules[texture_number];
                 let pixel_layout = texture.config.pixel_layout;
                 let width = texture.config.width;
                 let coord_register = self.read_vector_register(*src_xy_u32, run_context);
@@ -1328,7 +1435,8 @@ impl ShadingUnitContext {
                 }
             },
             ShaderInstruction::LoadTextureScalar { src_xy_u32, load_type, channel, dst, texture } => {
-                let texture = &texture_modules[*texture as usize];
+                let texture_number = resource_map.texture[*texture as usize] as usize;
+                let texture = &texture_modules[texture_number];
                 let pixel_layout = texture.config.pixel_layout;
                 let scalar_register = self.write_scalar_register(*dst, run_context)?;
                 let coord_register = self.read_vector_register(*src_xy_u32, run_context);

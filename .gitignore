@@ -6,4 +6,5 @@ sdk/rust/rvfm/target
 .vscode/
 callgraph.svg
 shader_assembler/target
-tests/*/target
+tests/rust/target
+tests/hello_triangle/target

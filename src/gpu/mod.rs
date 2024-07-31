@@ -8,6 +8,7 @@ mod vertex_shader;
 mod fragment_shader;
 mod rasterizer;
 mod shader_parser;
+mod pipeline_state;
 
 use std::sync::{mpsc::{self, Receiver, TryRecvError}, Arc};
 use parking_lot::Mutex;

@@ -1,1 +1,0 @@
-{"rustc":458667574049689136,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[1862144419951581519,"build_script_build",false,17656279912112706494]],"local":[{"RerunIfChanged":{"output":"riscv32i-unknown-none-elf/release/build/rvfm-5adae5246c9fd84a/output","paths":["build.rs","link.ld"]}}],"rustflags":[],"metadata":0,"config":0,"compile_kind":0}

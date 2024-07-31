@@ -3,9 +3,10 @@ use super::texture::TextureModule;
 use super::buffer::BufferModule;
 use super::types::PixelDataLayout;
 
+#[derive(Debug, Default)]
 pub struct FragmentState {
-    output_assignments: Vec<FragmentOutputAssignment>,
-    depth_state: Option<FragmentDepthState>,
+    pub output_assignments: Vec<FragmentOutputAssignment>,
+    pub depth_state: Option<FragmentDepthState>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -19,6 +20,23 @@ pub enum FragmentOutputType {
     IntToF32,
     UIntToUInt,
     UIntToF32,
+}
+
+impl FragmentOutputType {
+    pub fn from_u8(x: u8) -> Option<Self> {
+        Some(match x {
+            0 => Self::F32ToF32,
+            1 => Self::F32ToInt,
+            2 => Self::F32ToUInt,
+            3 => Self::F32ToINorm,
+            4 => Self::F32ToUNorm,
+            5 => Self::IntToInt,
+            6 => Self::IntToF32,
+            7 => Self::UIntToUInt,
+            8 => Self::UIntToF32,
+            _ => None?
+        })
+    }
 }
 
 pub const FRAGMENT_VECTOR_INPUT_BUILTIN_POSITION    : usize = 0x00;
@@ -38,6 +56,7 @@ pub struct FragmentOutputAssignment {
     pub offset: [u32; 2]
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DepthCompareFn {
     Never,
     Always,
@@ -47,6 +66,21 @@ pub enum DepthCompareFn {
     GreaterOrEqual,
 }
 
+impl DepthCompareFn {
+    pub fn from_u8(x: u8) -> Option<Self> {
+        Some(match x {
+            0 => Self::Never,
+            1 => Self::Always,
+            2 => Self::Less,
+            3 => Self::LessOrEqual,
+            4 => Self::Greater,
+            5 => Self::GreaterOrEqual,
+            _ => None?
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct FragmentDepthState {
     pub depth_texture: u8,
     pub compare_fn: DepthCompareFn,
@@ -55,7 +89,7 @@ pub struct FragmentDepthState {
 
 pub struct FragmentShaderCall<'a> {
     pub state  : &'a FragmentState,
-    pub shader : &'a [ShaderInstruction],
+    pub shader : u8,
 
     pub fragmen_count: usize,
 
@@ -64,14 +98,22 @@ pub struct FragmentShaderCall<'a> {
     
     pub buffer_modules  : &'a mut [BufferModule; 256],
     pub texture_modules : &'a mut [TextureModule; 64],
+    pub shader_modules  : &'a [ShaderModule; 128],
+
+    pub resource_map: &'a ResourceMap,
 }
 
 pub fn run_fragment_shader(mut call: FragmentShaderCall<'_>) {
     let invocation_count = call.fragmen_count;
     let mut continue_instructions = true;
-    let mut instructions = call.shader.iter();
+
+    let mut shader = &call.shader_modules[call.shader as usize];
+    if shader.shader_type != ShaderType::Fragment {
+        return;
+    }
+    let mut instructions = shader.instruction_buffer[0..shader.instruction_count].iter();
     while let (Some(instruction), true) = (instructions.next(), continue_instructions) {
-        if call.shading_unit_context.run_instruction(invocation_count, instruction, &mut call.shading_unit_run_context, &mut call.buffer_modules, &mut call.texture_modules).is_none() {
+        if call.shading_unit_context.run_instruction(invocation_count, instruction, &mut call.shading_unit_run_context, &mut call.buffer_modules, &mut call.texture_modules, call.resource_map).is_none() {
             continue_instructions = false;
         }
     }
@@ -79,7 +121,8 @@ pub fn run_fragment_shader(mut call: FragmentShaderCall<'_>) {
     let mut depth_pass_buffer = [0u32; (CORE_COUNT + 31) >> 5];
 
     if let Some(depth_state) = &call.state.depth_state {
-        let depth_texture = &mut call.texture_modules[depth_state.depth_texture as usize];
+        let depth_texture_index = call.resource_map.texture[depth_state.depth_texture as usize] as usize;
+        let depth_texture = &mut call.texture_modules[depth_texture_index];
         if depth_texture.config.pixel_layout != PixelDataLayout::D32x1 {
             return;
         }
@@ -106,7 +149,8 @@ pub fn run_fragment_shader(mut call: FragmentShaderCall<'_>) {
         depth_pass_buffer.fill(0xFFFFFFFF);
     }
     'output: for output in call.state.output_assignments.iter() {
-        let texture = &mut call.texture_modules[output.texture as usize];
+        let texture_index = call.resource_map.texture[output.texture as usize] as usize;
+        let texture = &mut call.texture_modules[texture_index];
         match output.c {
             ShaderCardinality::Scalar => {
                 let write_fn: fn(&mut TextureModule, u32, u32, u32) -> () = match (output.t, texture.config.pixel_layout) {
@@ -238,7 +282,8 @@ pub fn run_fragment_shader(mut call: FragmentShaderCall<'_>) {
                 }
             },
             ShaderCardinality::V2 => {
-                let texture = &mut call.texture_modules[output.texture as usize];
+                let texture_index = call.resource_map.texture[output.texture as usize] as usize;
+                let texture = &mut call.texture_modules[texture_index];
                 let write_fn: fn(&mut TextureModule, u32, u32, [u32; 4]) -> () = match (output.t, texture.config.pixel_layout) {
                     (FragmentOutputType::F32ToF32, PixelDataLayout::D32x2) => 
                         |texture: &mut TextureModule, x: u32, y: u32, vector_value: [u32; 4]| {
@@ -253,7 +298,8 @@ pub fn run_fragment_shader(mut call: FragmentShaderCall<'_>) {
                 }
             }
             ShaderCardinality::V3 => {
-                let texture = &mut call.texture_modules[output.texture as usize];
+                let texture_index = call.resource_map.texture[output.texture as usize] as usize;
+                let texture = &mut call.texture_modules[texture_index];
                 let write_fn: fn(&mut TextureModule, u32, u32, [u32; 4]) -> () = match (output.t, texture.config.pixel_layout) {
                     (FragmentOutputType::F32ToF32, PixelDataLayout::D32x4) => 
                         |texture: &mut TextureModule, x: u32, y: u32, vector_value: [u32; 4]| {
@@ -268,7 +314,8 @@ pub fn run_fragment_shader(mut call: FragmentShaderCall<'_>) {
                 }
             }
             ShaderCardinality::V4 => {
-                let texture = &mut call.texture_modules[output.texture as usize];
+                let texture_index = call.resource_map.texture[output.texture as usize] as usize;
+                let texture = &mut call.texture_modules[texture_index];
                 let write_fn: fn(&mut TextureModule, u32, u32, [u32; 4]) -> () = match (output.t, texture.config.pixel_layout) {
                     (FragmentOutputType::F32ToF32, PixelDataLayout::D32x2) => 
                         |texture: &mut TextureModule, x: u32, y: u32, vector_value: [u32; 4]| {

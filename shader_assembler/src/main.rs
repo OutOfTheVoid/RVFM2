@@ -6,9 +6,25 @@ mod instructions;
 use lexer::*;
 use assembler::*;
 
+const PROGRAM_USAGE: &'static str = "usage:\n    shasm <shader assmebly file> -<shader kind> <binary output file>\n        shader kinds:\n        * v: vertex\n        * f: fragment\n        * c: compute\n";
+
 fn main() {
-    let test_str = include_str!("../test.shasm");
-    let lexer_result = run_lexer(test_str);
+    let mut args = std::env::args();
+    args.next();
+    let assembly_file = args.next().expect(PROGRAM_USAGE);
+    let mode_switch = args.next().expect(PROGRAM_USAGE);
+    let output_binary_file = args.next().expect(PROGRAM_USAGE);
+
+    let entry_type = match mode_switch.as_str() {
+        "-v" => EntryType::Vertex,
+        "-f" => EntryType::Fragment,
+        "-c" => EntryType::Compute,
+        _ => panic!("Unknown flag: {}", mode_switch),
+    };
+
+    let input = std::fs::read_to_string(assembly_file).expect("Failed to read input file!");
+
+    let lexer_result = run_lexer(&input);
     let tokens = match lexer_result {
         Ok(tokens) => {
             println!("LEXER FINISHED - tokens:");
@@ -27,7 +43,7 @@ fn main() {
             return;
         }
     };
-    let entry_type = EntryType::Vertex;
+    
     let mut start_token = None;
     let mut end_token = None;
     for i in 0..tokens.len() {
@@ -61,6 +77,7 @@ fn main() {
             for byte in bytes.iter() {
                 println!("{:02X}", &byte);
             }
+            std::fs::write(output_binary_file, &bytes).expect("Failed to write output file")
         },
         Err(errors) => {
             for error in errors {

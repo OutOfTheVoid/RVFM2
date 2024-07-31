@@ -248,6 +248,7 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
             } else {
                 None
             };
+            write_cmov(bytes, instruction_token, cond.0, dst.0, dst_component, src.0, src_component, entry_type)?;
         },
         InstructionType::Read => todo!(),
         InstructionType::Write => todo!(),

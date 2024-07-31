@@ -5,7 +5,6 @@ pub mod intrin;
 pub mod interrupt;
 pub mod hart;
 pub mod command_list;
-pub mod completion;
 pub mod input;
 pub mod spu;
 

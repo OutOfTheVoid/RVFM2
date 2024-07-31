@@ -59,3 +59,21 @@ impl<'a, Commands> CommandListBuilder<'a, Commands> {
         CommandList(self.buffer, PhantomData)
     }
 }
+
+pub struct CommandListCompletion<'c>(pub(crate) &'c mut u32);
+
+impl<'c> CommandListCompletion<'c> {
+    fn wait(&mut self) {
+        while !self.poll() {}
+    }
+
+    fn poll(&mut self) -> bool {
+        unsafe { (self.0 as *mut u32).read_volatile() != 0 }
+    }
+}
+
+impl Drop for CommandListCompletion<'_> {
+    fn drop(&mut self) {
+        self.wait()
+    }
+}
