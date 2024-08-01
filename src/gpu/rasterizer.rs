@@ -106,7 +106,6 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
     while vertex_count > 0 {
         let vertex_invocation_count = vertex_count - (vertex_count % 3);
         {
-            println!("RASTERIZER: shading {} verts", vertex_invocation_count);
             let vertex_run_context = unsafe { ShadingUnitRunContext {
                 scalar_input_array:  &mut *(&mut call.io_arrays[0].scalar_array as *mut _),
                 vector_input_array:  &mut *(&mut call.io_arrays[0].vector_array as *mut _),
@@ -143,8 +142,6 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
         let target_rect_width = call.target_rect.lower_right.0 - call.target_rect.upper_left.0;
         let target_rect_height = call.target_rect.lower_right.1 - call.target_rect.upper_left.1;
 
-        println!("RASTERIZER: target size: ({} x {})", target_rect_width, target_rect_height);
-
         let mut fragment_invocation_count = 0;
 
         for t in 0..vertex_invocation_count / 3 {
@@ -155,8 +152,6 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
             let discard_a = call.io_arrays[1].scalar_array[VERTEX_SCALAR_OUTPUT_BUILTIN_VERTEX_DISCARD][v0];
             let discard_b = call.io_arrays[1].scalar_array[VERTEX_SCALAR_OUTPUT_BUILTIN_VERTEX_DISCARD][v1];
             let discard_c = call.io_arrays[1].scalar_array[VERTEX_SCALAR_OUTPUT_BUILTIN_VERTEX_DISCARD][v2];
-
-            println!("RASTERIZER: verices: {:?}, discards: {:?}", &[v0, v1, v2], &[discard_a, discard_b, discard_c]);
 
             if (discard_a | discard_b | discard_c) != 0 {
                 continue;
@@ -244,6 +239,9 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
                     let z = p0[2] * b0 + p1[2] * b1 + p2[2] * b2;
                     call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_POSITION   ][fragment_invocation_count] = [(x as f32).to_bits(), (y as f32).to_bits(), (z as f32).to_bits(), 0];
                     call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_BARYCENTRIC][fragment_invocation_count] = [b0.to_bits(), b1.to_bits(), b2.to_bits(), 0];
+                    
+                    // TODO: figure out how to speed this up - likely this will require some kind of "triangle buffer" so we can have provoking vertex and interpolation source information
+                    // on a [for each varying per shader core] basis, rather than [for each core, per varying], linearizing IO register access and making it easier to vectorize
                     for varying in call.state.varyings.iter() {
                         match varying.t {
                             ShaderVaryingType::F32x3(Interpolation::ProvokingVertexFlat) |
@@ -260,7 +258,6 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
                                 let val_0 = call.io_arrays[1].vector_array[varying.slot as usize][v0].map(|x| f32::from_bits(x));
                                 let val_1 = call.io_arrays[1].vector_array[varying.slot as usize][v1].map(|x| f32::from_bits(x));
                                 let val_2 = call.io_arrays[1].vector_array[varying.slot as usize][v2].map(|x| f32::from_bits(x));
-                                println!("val_0: {:?}, val_1: {:?}, val_2: {:?}", val_0, val_1, val_2);
                                 call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count] = [0, 1, 2, 3].map(|c| (val_0[c] * b0 + val_1[c] * b1 + val_2[c] * b2).to_bits());
                             },
                             _ => println!("GPU ERROR: shader varying type {:?} unimplemented!", varying.t),
@@ -269,7 +266,6 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
                     fragment_invocation_count += 1;
 
                     if fragment_invocation_count == CORE_COUNT {
-                        println!("invoking fragment shader {CORE_COUNT} times");
                         fragment_invocation_count = 0;
                         invoke_fragment_shader(CORE_COUNT, &mut call);
                     }
@@ -277,7 +273,6 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
             }
         }
         if fragment_invocation_count > 0 {
-            println!("invoking fragment shader {fragment_invocation_count} times");
             invoke_fragment_shader(fragment_invocation_count, &mut call);
         }
     }
@@ -292,7 +287,6 @@ fn invoke_fragment_shader(invocation_count: usize, call: &mut RasterizerCall<'_>
         scalar_constant_array: &mut *(&mut call.constant_array.scalar_constant_array as *mut _),
         vector_constant_array: &mut *(&mut call.constant_array.vector_constant_array as *mut _),
     } };
-    println!("fragment shader index: {}", call.fragment_shader);
     let fragment_call = FragmentShaderCall {
         state: call.fragment_state,
         shader: call.fragment_shader,

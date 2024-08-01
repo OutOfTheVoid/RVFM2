@@ -317,7 +317,6 @@ pub fn run_fragment_shader(mut call: FragmentShaderCall<'_>) {
             ShaderCardinality::V4 => {
                 let texture_index = call.resource_map.texture[output.texture as usize] as usize;
                 let texture = &mut call.texture_modules[texture_index];
-                println!("output pixel data format: {:?}", texture.config.pixel_layout);
                 let write_fn: fn(&mut TextureModule, u32, u32, [u32; 4]) -> () = match (output.t, texture.config.pixel_layout) {
                     (FragmentOutputType::F32ToF32, PixelDataLayout::D32x4) => 
                         |texture: &mut TextureModule, x: u32, y: u32, vector_value: [u32; 4]| {

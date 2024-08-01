@@ -138,8 +138,7 @@ impl RasterizerState {
             let c = ShaderCardinality::from_u8(c)?;
             let t = machine.read_u8(constant_address + 7).to_opt()?;
             let t = ShaderInputType::from_u8(t)?;
-
-            println!("read ShaderConstantAssignment: constant_address: {:08X}, offset: {offset}, constant: {constant}, source_buffer: {source_buffer}, c: {:?}, t: {:?}", constant_address, c, t);
+            
             constants.push(ShaderConstantAssignment {
                 constant,
                 source_buffer,
@@ -156,10 +155,6 @@ impl RasterizerState {
             machine.read_block(buffer_mapping_array_address, &mut resource_map.texture[0..texture_mapping_count as usize]).to_opt()?;
         }
 
-        println!("Varyings: ");
-        for varying in &varyings[..] {
-            println!("{:?}", varying);
-        }
         Some(RasterizerState {
             varyings,
             constants,

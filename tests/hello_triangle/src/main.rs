@@ -24,13 +24,13 @@ const FRAGMENT_SHADER : &'static [u8] = include_bytes!("../bin/fshader.bin");
 
 const VERTEX_DATA: &'static [f32] = &[
     0.0, -0.5,  0.0,
-    1.0,  0.0,  0.0,
+    1.0,  0.0,  1.0,
 
     -0.5,  0.5,  0.0,
-    0.0,  1.0,  0.0,
+    1.0,  1.0,  0.0,
 
     0.5,  0.5,  0.0,
-    0.0,  0.0,  1.0,
+    0.0,  1.0,  1.0,
 ];
 
 const CONSTANT_DATA: &'static [[f32; 4]] = &[

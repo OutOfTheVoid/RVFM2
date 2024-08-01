@@ -545,7 +545,6 @@ impl ShadingUnitIOArrays {
 
 pub fn setup_shader_constants<'a>(constant_array: &'a mut ShadingUnitConstantArray, constants: &[ShaderConstantAssignment], resource_map: &ResourceMap, buffer_modules: &mut [BufferModule; 256]) {
     for constant_assignment in constants.iter() {
-        println!("Shader constant assignment: {:?}", constant_assignment);
         let buffer_index = resource_map.buffer[constant_assignment.source_buffer as usize] as usize;
         let bytes = buffer_modules[buffer_index].bytes();
         let read_fn = match constant_assignment.t {
@@ -681,7 +680,6 @@ impl ShadingUnitContext {
     }
 
     pub fn run_instruction<'io, 'rc>(&mut self, n: usize, instruction: &ShaderInstruction, run_context: &'rc mut ShadingUnitRunContext<'io>, buffer_modules: &mut [BufferModule; 256], texture_modules: &mut [TextureModule; 64], resource_map: &ResourceMap) -> Option<()> {
-        println!("run_instruction: {:?}", instruction);
         match instruction {
             ShaderInstruction::Nop => {},
             ShaderInstruction::PushVector(register) => {

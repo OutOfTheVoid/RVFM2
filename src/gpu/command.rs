@@ -295,7 +295,6 @@ impl Command {
                 let index = command_list.read_u8(offset + 10)?;
                 let kind = command_list.read_u8(offset + 11)?;
                 let kind = ShaderType::from_u8(kind)?;
-                println!("UploadShader - index: {index}, kind: {:?}", kind);
                 Some((offset + 12, Command::UploadShader { size, index, kind, address }))
             },
             Some(0x00_0D) => {
