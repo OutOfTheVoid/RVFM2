@@ -19,6 +19,7 @@ enum RunState {
     BusError,
 }
 
+#[derive(Debug)]
 pub enum ClockEvent {
     Reset(u32),
     Cycles(usize)

@@ -7,6 +7,8 @@ pub mod hart;
 pub mod command_list;
 pub mod input;
 pub mod spu;
+#[cfg(feature = "multihart")]
+pub mod multihart;
 
 #[macro_use]
 pub mod debug;

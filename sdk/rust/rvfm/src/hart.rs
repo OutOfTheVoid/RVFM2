@@ -8,7 +8,7 @@ pub enum Hart {
     Hart3,
 }
 
-const HART_START_TRIGGER_BASE: u32 = 0x80020000;
+const HART_START_TRIGGER_BASE: u32 = 0x8002_0000;
 
 impl Hart {
     pub fn current() -> Self {
@@ -31,8 +31,8 @@ impl Hart {
         }
     }
 
-    pub fn start(self, start_address: *const ()) {
-        let address = HART_START_TRIGGER_BASE + self.to_u32() << 2;
-        unsafe { core::ptr::write(address as usize as *mut u32, start_address as usize as u32); }
+    pub unsafe fn start_raw(self, start_address: *const ()) {
+        let address = HART_START_TRIGGER_BASE + (self.to_u32() << 2);
+        unsafe { (address as usize as *mut u32).write_volatile(start_address as usize as u32); }
     }
 }

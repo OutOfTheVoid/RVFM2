@@ -6,7 +6,10 @@ links = "rvfm"
 build = "build.rs"
 
 [lib]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+default-features = []
 
 [dependencies]
 bytemuck = "1.16"
+
+[features]
+multihart = []

@@ -8,3 +8,4 @@ callgraph.svg
 shader_assembler/target
 tests/rust/target
 tests/hello_triangle/target
+tests/*/target

@@ -37,6 +37,27 @@ const CONSTANT_DATA: &'static [[f32; 4]] = &[
     [0.0, 1.0, 0.0, 1.0]
 ];
 
+const VERTEX_STATE: VertexState = VertexState::new(
+    &[
+        VertexInputAssignment {
+            input: 0x10,
+            buffer_src: VERTEX_BUFFER_ID,
+            input_type: ShaderInputType::F32FromF32,
+            input_cardinality: ShaderCardinality::V3,
+            offset: 0,
+            stride: 24,
+        },
+        VertexInputAssignment {
+            input: 0x11,
+            buffer_src: VERTEX_BUFFER_ID,
+            input_type: ShaderInputType::F32FromF32,
+            input_cardinality: ShaderCardinality::V3,
+            offset: 12,
+            stride: 24,
+        }
+    ]
+);
+
 const RASTERIZER_STATE: RasterizerState = RasterizerState::new(
     &[
         VaryingAssignment {
@@ -57,27 +78,6 @@ const RASTERIZER_STATE: RasterizerState = RasterizerState::new(
     ],
     &[0, 1],
     &[0]
-);
-
-const VERTEX_STATE: VertexState = VertexState::new(
-    &[
-        VertexInputAssignment {
-            input: 0x10,
-            buffer_src: VERTEX_BUFFER_ID,
-            input_type: ShaderInputType::F32FromF32,
-            input_cardinality: ShaderCardinality::V3,
-            offset: 0,
-            stride: 24,
-        },
-        VertexInputAssignment {
-            input: 0x11,
-            buffer_src: VERTEX_BUFFER_ID,
-            input_type: ShaderInputType::F32FromF32,
-            input_cardinality: ShaderCardinality::V3,
-            offset: 12,
-            stride: 24,
-        }
-    ]
 );
 
 const FRAGMENT_STATE: FragmentState = FragmentState::new(None, &[

@@ -230,7 +230,7 @@ impl Machine {
                 0x0000_0000 ..= 0x07FF_FFFC => self.ram_write(addr, value),
                 0x8000_0000 ..= 0x8000_0013 => return debug_write_u32(self, addr & 0x1F, value),
                 0x8001_0000                 => return gpu_write_u32(0, value),
-                0x8002_0000 ..= 0x8002_000C => return clock_write_u32(addr & 0x1F, value),
+                0x8002_0000 ..= 0x8002_000C => return clock_write_u32(addr & 0x0F, value),
                 0x8003_0000 ..= 0x8003_0FFC => return interrupt_controller_write_u32(addr & 0xFFF, value),
                 0x8004_0000 ..= 0x8004_001C => return spu_write_u32(addr & 0x1F, value),
                 0x8005_0000 ..= 0x8005_002C => return input_write_u32(addr & 0x3F, value),

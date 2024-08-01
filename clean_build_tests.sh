@@ -79,3 +79,13 @@ pwd
 make clean
 make
 popd
+
+
+pushd tests/rust_multihart
+echo "===================================="
+echo "making tests/rust_multihart"
+echo "===================================="
+pwd
+make clean
+make
+popd

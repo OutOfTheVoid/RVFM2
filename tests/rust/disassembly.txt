@@ -255,7 +255,7 @@ f80003b0:	00008067          	ret
 
 f80003b4 <_ZN4core3fmt5Write9write_fmt17he71102018162ba79E>:
 f80003b4:	f8002637          	lui	a2,0xf8002
-f80003b8:	c4c60613          	add	a2,a2,-948 # f8001c4c <.Lanon.dc8399537774fc121108dc773a710ae0.0>
+f80003b8:	c4c60613          	add	a2,a2,-948 # f8001c4c <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.0>
 f80003bc:	00058693          	mv	a3,a1
 f80003c0:	00060593          	mv	a1,a2
 f80003c4:	00068613          	mv	a2,a3
@@ -286,13 +286,13 @@ f800041c:	00008067          	ret
 f8000420:	00052023          	sw	zero,0(a0)
 f8000424:	00008067          	ret
 f8000428:	f8002537          	lui	a0,0xf8002
-f800042c:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>
+f800042c:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>
 f8000430:	00070513          	mv	a0,a4
 f8000434:	00080593          	mv	a1,a6
 f8000438:	00001097          	auipc	ra,0x1
 f800043c:	f6c080e7          	jalr	-148(ra) # f80013a4 <_ZN4core5slice5index22slice_index_order_fail17hea267c10579e6abbE>
 f8000440:	f8002537          	lui	a0,0xf8002
-f8000444:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>
+f8000444:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>
 f8000448:	00080513          	mv	a0,a6
 f800044c:	00001097          	auipc	ra,0x1
 f8000450:	eec080e7          	jalr	-276(ra) # f8001338 <_ZN4core5slice5index24slice_end_index_len_fail17h62eef51decd7a014E>
@@ -330,13 +330,13 @@ f80004c4:	00008067          	ret
 f80004c8:	00052023          	sw	zero,0(a0)
 f80004cc:	00008067          	ret
 f80004d0:	f8002537          	lui	a0,0xf8002
-f80004d4:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>
+f80004d4:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>
 f80004d8:	00078513          	mv	a0,a5
 f80004dc:	00080593          	mv	a1,a6
 f80004e0:	00001097          	auipc	ra,0x1
 f80004e4:	ec4080e7          	jalr	-316(ra) # f80013a4 <_ZN4core5slice5index22slice_index_order_fail17hea267c10579e6abbE>
 f80004e8:	f8002537          	lui	a0,0xf8002
-f80004ec:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>
+f80004ec:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>
 f80004f0:	00080513          	mv	a0,a6
 f80004f4:	00001097          	auipc	ra,0x1
 f80004f8:	e44080e7          	jalr	-444(ra) # f8001338 <_ZN4core5slice5index24slice_end_index_len_fail17h62eef51decd7a014E>
@@ -391,13 +391,13 @@ f80005b0:	00c12983          	lw	s3,12(sp)
 f80005b4:	02010113          	add	sp,sp,32
 f80005b8:	00008067          	ret
 f80005bc:	f8002537          	lui	a0,0xf8002
-f80005c0:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>
+f80005c0:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>
 f80005c4:	00070513          	mv	a0,a4
 f80005c8:	00048593          	mv	a1,s1
 f80005cc:	00001097          	auipc	ra,0x1
 f80005d0:	dd8080e7          	jalr	-552(ra) # f80013a4 <_ZN4core5slice5index22slice_index_order_fail17hea267c10579e6abbE>
 f80005d4:	f8002537          	lui	a0,0xf8002
-f80005d8:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>
+f80005d8:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>
 f80005dc:	00048513          	mv	a0,s1
 f80005e0:	00040593          	mv	a1,s0
 f80005e4:	00001097          	auipc	ra,0x1
@@ -434,13 +434,13 @@ f8000654:	00008067          	ret
 f8000658:	00052023          	sw	zero,0(a0)
 f800065c:	00008067          	ret
 f8000660:	f8002537          	lui	a0,0xf8002
-f8000664:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>
+f8000664:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>
 f8000668:	00080513          	mv	a0,a6
 f800066c:	00028593          	mv	a1,t0
 f8000670:	00001097          	auipc	ra,0x1
 f8000674:	d34080e7          	jalr	-716(ra) # f80013a4 <_ZN4core5slice5index22slice_index_order_fail17hea267c10579e6abbE>
 f8000678:	f8002537          	lui	a0,0xf8002
-f800067c:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>
+f800067c:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>
 f8000680:	00028513          	mv	a0,t0
 f8000684:	00001097          	auipc	ra,0x1
 f8000688:	cb4080e7          	jalr	-844(ra) # f8001338 <_ZN4core5slice5index24slice_end_index_len_fail17h62eef51decd7a014E>
@@ -484,13 +484,13 @@ f8000714:	00008067          	ret
 f8000718:	00052023          	sw	zero,0(a0)
 f800071c:	00008067          	ret
 f8000720:	f8002537          	lui	a0,0xf8002
-f8000724:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>
+f8000724:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>
 f8000728:	00070513          	mv	a0,a4
 f800072c:	00080593          	mv	a1,a6
 f8000730:	00001097          	auipc	ra,0x1
 f8000734:	c74080e7          	jalr	-908(ra) # f80013a4 <_ZN4core5slice5index22slice_index_order_fail17hea267c10579e6abbE>
 f8000738:	f8002537          	lui	a0,0xf8002
-f800073c:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>
+f800073c:	d4050613          	add	a2,a0,-704 # f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>
 f8000740:	00080513          	mv	a0,a6
 f8000744:	00001097          	auipc	ra,0x1
 f8000748:	bf4080e7          	jalr	-1036(ra) # f8001338 <_ZN4core5slice5index24slice_end_index_len_fail17h62eef51decd7a014E>
@@ -511,7 +511,7 @@ f8000778:	00a5a023          	sw	a0,0(a1) # 80010000 <__stack_ptr+0x78010000>
 f800077c:	00060513          	mv	a0,a2
 f8000780:	00008067          	ret
 f8000784:	f8002537          	lui	a0,0xf8002
-f8000788:	c9850613          	add	a2,a0,-872 # f8001c98 <.Lanon.dc8399537774fc121108dc773a710ae0.2>
+f8000788:	c9850613          	add	a2,a0,-872 # f8001c98 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.2>
 f800078c:	00800513          	li	a0,8
 f8000790:	00001097          	auipc	ra,0x1
 f8000794:	ba8080e7          	jalr	-1112(ra) # f8001338 <_ZN4core5slice5index24slice_end_index_len_fail17h62eef51decd7a014E>
@@ -577,7 +577,7 @@ f8000868:	05410593          	add	a1,sp,84
 f800086c:	04b12023          	sw	a1,64(sp)
 f8000870:	04a12223          	sw	a0,68(sp)
 f8000874:	f8002537          	lui	a0,0xf8002
-f8000878:	d6050513          	add	a0,a0,-672 # f8001d60 <.Lanon.dc8399537774fc121108dc773a710ae0.13>
+f8000878:	d6050513          	add	a0,a0,-672 # f8001d60 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.13>
 f800087c:	00a12823          	sw	a0,16(sp)
 f8000880:	00400513          	li	a0,4
 f8000884:	00a12a23          	sw	a0,20(sp)
@@ -586,7 +586,7 @@ f800088c:	02810593          	add	a1,sp,40
 f8000890:	00b12c23          	sw	a1,24(sp)
 f8000894:	00a12e23          	sw	a0,28(sp)
 f8000898:	f8002537          	lui	a0,0xf8002
-f800089c:	c4c50593          	add	a1,a0,-948 # f8001c4c <.Lanon.dc8399537774fc121108dc773a710ae0.0>
+f800089c:	c4c50593          	add	a1,a0,-948 # f8001c4c <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.0>
 f80008a0:	05b10513          	add	a0,sp,91
 f80008a4:	01010613          	add	a2,sp,16
 f80008a8:	00000097          	auipc	ra,0x0
@@ -598,9 +598,9 @@ f80008bc:	00b52823          	sw	a1,16(a0)
 f80008c0:	10500073          	wfi
 f80008c4:	ffdff06f          	j	f80008c0 <rust_begin_unwind+0xf8>
 f80008c8:	f8002537          	lui	a0,0xf8002
-f80008cc:	ca850513          	add	a0,a0,-856 # f8001ca8 <.Lanon.dc8399537774fc121108dc773a710ae0.3>
+f80008cc:	ca850513          	add	a0,a0,-856 # f8001ca8 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.3>
 f80008d0:	f80025b7          	lui	a1,0xf8002
-f80008d4:	cfc58613          	add	a2,a1,-772 # f8001cfc <.Lanon.dc8399537774fc121108dc773a710ae0.5>
+f80008d4:	cfc58613          	add	a2,a1,-772 # f8001cfc <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.5>
 f80008d8:	02800593          	li	a1,40
 f80008dc:	00000097          	auipc	ra,0x0
 f80008e0:	060080e7          	jalr	96(ra) # f800093c <_ZN4core9panicking5panic17h849d9327ce9249d4E>
@@ -1922,7 +1922,7 @@ f8001c46:	0000                	.2byte	0x0
 f8001c48:	007f 0000   	.byte	0x7f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 f8001c50:	 
 
-f8001c4c <.Lanon.dc8399537774fc121108dc773a710ae0.0>:
+f8001c4c <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.0>:
 	...
 f8001c54:	0001                	.2byte	0x1
 f8001c56:	0000                	.2byte	0x0
@@ -1933,7 +1933,7 @@ f8001c5e:	f800                	.2byte	0xf800
 f8001c60:	03b4                	.2byte	0x3b4
 f8001c62:	f800                	.2byte	0xf800
 
-f8001c64 <.Lanon.dc8399537774fc121108dc773a710ae0.1>:
+f8001c64 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.1>:
 f8001c64:	6573552f          	.4byte	0x6573552f
 f8001c68:	7372                	.2byte	0x7372
 f8001c6a:	61696c2f          	.4byte	0x61696c2f
@@ -1954,7 +1954,7 @@ f8001c92:	2e64                	.2byte	0x2e64
 f8001c94:	7372                	.2byte	0x7372
 	...
 
-f8001c98 <.Lanon.dc8399537774fc121108dc773a710ae0.2>:
+f8001c98 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.2>:
 f8001c98:	1c64                	.2byte	0x1c64
 f8001c9a:	f800                	.2byte	0xf800
 f8001c9c:	0032                	.2byte	0x32
@@ -1962,7 +1962,7 @@ f8001c9e:	0000                	.2byte	0x0
 f8001ca0:	0000018f          	.4byte	0x18f
 f8001ca4:	00000013          	nop
 
-f8001ca8 <.Lanon.dc8399537774fc121108dc773a710ae0.3>:
+f8001ca8 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.3>:
 f8001ca8:	6e69                	.2byte	0x6e69
 f8001caa:	6574                	.2byte	0x6574
 f8001cac:	6e72                	.2byte	0x6e72
@@ -1982,7 +1982,7 @@ f8001cc8:	6c62                	.2byte	0x6c62
 f8001cca:	2065                	.2byte	0x2065
 f8001ccc:	65646f63          	bltu	s0,s6,f800232a <_etext+0x456>
 
-f8001cd0 <.Lanon.dc8399537774fc121108dc773a710ae0.4>:
+f8001cd0 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.4>:
 f8001cd0:	6573552f          	.4byte	0x6573552f
 f8001cd4:	7372                	.2byte	0x7372
 f8001cd6:	61696c2f          	.4byte	0x61696c2f
@@ -2001,7 +2001,7 @@ f8001cf6:	7472                	.2byte	0x7472
 f8001cf8:	722e                	.2byte	0x722e
 f8001cfa:	          	.4byte	0x1cd00073
 
-f8001cfc <.Lanon.dc8399537774fc121108dc773a710ae0.5>:
+f8001cfc <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.5>:
 f8001cfc:	1cd0                	.2byte	0x1cd0
 f8001cfe:	f800                	.2byte	0xf800
 f8001d00:	0000002b          	.4byte	0x2b
@@ -2010,7 +2010,7 @@ f8001d06:	0000                	.2byte	0x0
 f8001d08:	0012                	.2byte	0x12
 	...
 
-f8001d0c <.Lanon.dc8399537774fc121108dc773a710ae0.6>:
+f8001d0c <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.6>:
 f8001d0c:	6573552f          	.4byte	0x6573552f
 f8001d10:	7372                	.2byte	0x7372
 f8001d12:	61696c2f          	.4byte	0x61696c2f
@@ -2031,7 +2031,7 @@ f8001d38:	696c                	.2byte	0x696c
 f8001d3a:	722e7473          	.4byte	0x722e7473
 f8001d3e:	          	.4byte	0x1d0c0073
 
-f8001d40 <.Lanon.dc8399537774fc121108dc773a710ae0.7>:
+f8001d40 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.7>:
 f8001d40:	1d0c                	.2byte	0x1d0c
 f8001d42:	f800                	.2byte	0xf800
 f8001d44:	00000033          	add	zero,zero,zero
@@ -2039,22 +2039,22 @@ f8001d48:	002c                	.2byte	0x2c
 f8001d4a:	0000                	.2byte	0x0
 f8001d4c:	00000013          	nop
 
-f8001d50 <.Lanon.dc8399537774fc121108dc773a710ae0.10>:
+f8001d50 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.10>:
 f8001d50:	6168                	.2byte	0x6168
 f8001d52:	7472                	.2byte	0x7472
 f8001d54:	                	.2byte	0x2020
 
-f8001d55 <.Lanon.dc8399537774fc121108dc773a710ae0.11>:
+f8001d55 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.11>:
 f8001d55:	7020                	.2byte	0x7020
 f8001d57:	6e61                	.2byte	0x6e61
 f8001d59:	6369                	.2byte	0x6369
 f8001d5b:	0a21                	.2byte	0xa21
 f8001d5d:	2040                	.2byte	0x2040
 
-f8001d5f <.Lanon.dc8399537774fc121108dc773a710ae0.12>:
+f8001d5f <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.12>:
 f8001d5f:	                	.2byte	0x503a
 
-f8001d60 <.Lanon.dc8399537774fc121108dc773a710ae0.13>:
+f8001d60 <.Lanon.ed8adcc0edac9d2cca8975dbe52d9d3b.13>:
 f8001d60:	1d50                	.2byte	0x1d50
 f8001d62:	f800                	.2byte	0xf800
 f8001d64:	0005                	.2byte	0x5
