@@ -241,9 +241,31 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
                     let b0 = areas[0] / area_sum;
                     let b1 = areas[1] / area_sum;
                     let b2 = areas[2] / area_sum;
-                    let z = p0[2] * b0 + p1[2] * b1 + p2[2];
+                    let z = p0[2] * b0 + p1[2] * b1 + p2[2] * b2;
                     call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_POSITION   ][fragment_invocation_count] = [(x as f32).to_bits(), (y as f32).to_bits(), (z as f32).to_bits(), 0];
                     call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_BARYCENTRIC][fragment_invocation_count] = [b0.to_bits(), b1.to_bits(), b2.to_bits(), 0];
+                    for varying in call.state.varyings.iter() {
+                        match varying.t {
+                            ShaderVaryingType::F32x3(Interpolation::ProvokingVertexFlat) |
+                            ShaderVaryingType::I32x3(Interpolation::ProvokingVertexFlat) => {
+                                call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count][0] = call.io_arrays[1].vector_array[varying.slot as usize][v0][0];
+                                call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count][1] = call.io_arrays[1].vector_array[varying.slot as usize][v0][1];
+                                call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count][2] = call.io_arrays[1].vector_array[varying.slot as usize][v0][2];
+                            },
+                            ShaderVaryingType::F32x4(Interpolation::ProvokingVertexFlat) |
+                            ShaderVaryingType::I32x4(Interpolation::ProvokingVertexFlat) => {
+                                call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count] = call.io_arrays[1].vector_array[varying.slot as usize][v0];
+                            },
+                            ShaderVaryingType::F32x4(Interpolation::Smooth) => {
+                                let val_0 = call.io_arrays[1].vector_array[varying.slot as usize][v0].map(|x| f32::from_bits(x));
+                                let val_1 = call.io_arrays[1].vector_array[varying.slot as usize][v1].map(|x| f32::from_bits(x));
+                                let val_2 = call.io_arrays[1].vector_array[varying.slot as usize][v2].map(|x| f32::from_bits(x));
+                                println!("val_0: {:?}, val_1: {:?}, val_2: {:?}", val_0, val_1, val_2);
+                                call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count] = [0, 1, 2, 3].map(|c| (val_0[c] * b0 + val_1[c] * b1 + val_2[c] * b2).to_bits());
+                            },
+                            _ => println!("GPU ERROR: shader varying type {:?} unimplemented!", varying.t),
+                        }
+                    }
                     fragment_invocation_count += 1;
 
                     if fragment_invocation_count == CORE_COUNT {

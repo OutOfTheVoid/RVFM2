@@ -1,5 +1,8 @@
 entry_v
     mov vertex_position, vin_0
+    mov vout_0, vin_1
+    mov sloc_0, vconst_0.w
+    mov vout_0.w, sloc_0
 
 entry_f
-    mov vout_0, vconst_0
+    mov vout_0, vin_0

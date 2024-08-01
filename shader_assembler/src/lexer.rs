@@ -175,16 +175,16 @@ pub fn run_lexer(input: &str) -> Result<Vec<Token>, Vec<SourceError>>  {
                     column: token_column,
                     value: None,
                 });
-            }
+            },
 
             '.' => {
                 tokens.push(Token {
-                    t: TokenType::Comma,
+                    t: TokenType::Dot,
                     line: token_line,
                     column: token_column,
                     value: None,
                 });
-            }
+            },
 
             'a' ..= 'z' | 'A' ..= 'Z' | '_' => {
                 value_string.push(c);

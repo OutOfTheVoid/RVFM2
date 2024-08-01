@@ -16,7 +16,7 @@ impl GraphicsPipelineState {
     pub fn read_from_address(address: u32, machine: &Arc<Machine>) -> Option<Self> {
         let vertex_state_address = machine.read_u32(address).to_opt()?;
         let fragment_state_address = machine.read_u32(address + 4).to_opt()?;
-        let rasterizer_state_address = machine.read_u32(address).to_opt()?;
+        let rasterizer_state_address = machine.read_u32(address + 8).to_opt()?;
         let vertex_state = VertexState::read_from_address(vertex_state_address, machine)?;
         let fragment_state = FragmentState::read_from_address(fragment_state_address, machine)?;
         let raster_state = RasterizerState::read_from_address(rasterizer_state_address, machine)?;
@@ -112,6 +112,7 @@ impl RasterizerState {
         let texture_mapping_array_address = machine.read_u32(address + 12).to_opt()?;
         let varying_count = machine.read_u8(address + 16).to_opt()?;
         let constant_count = machine.read_u8(address + 17).to_opt()?;
+        println!("RasterizerState::read_from_address(): constant_count = {constant_count}, constant_array_address: {:08X}", constant_array_address);
         let buffer_mapping_count = machine.read_u8(address + 18).to_opt()?;
         let texture_mapping_count = machine.read_u8(address + 19).to_opt()?;
         let mut varyings = Vec::new();
@@ -137,6 +138,8 @@ impl RasterizerState {
             let c = ShaderCardinality::from_u8(c)?;
             let t = machine.read_u8(constant_address + 7).to_opt()?;
             let t = ShaderInputType::from_u8(t)?;
+
+            println!("read ShaderConstantAssignment: constant_address: {:08X}, offset: {offset}, constant: {constant}, source_buffer: {source_buffer}, c: {:?}, t: {:?}", constant_address, c, t);
             constants.push(ShaderConstantAssignment {
                 constant,
                 source_buffer,
@@ -151,6 +154,11 @@ impl RasterizerState {
         }
         if texture_mapping_count != 0 {
             machine.read_block(buffer_mapping_array_address, &mut resource_map.texture[0..texture_mapping_count as usize]).to_opt()?;
+        }
+
+        println!("Varyings: ");
+        for varying in &varyings[..] {
+            println!("{:?}", varying);
         }
         Some(RasterizerState {
             varyings,
