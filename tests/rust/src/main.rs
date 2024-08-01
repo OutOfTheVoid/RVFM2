@@ -12,7 +12,7 @@ use rvfm::debug::*;
 use rvfm::intrin::*;
 use rvfm::input::*;
 
-fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], present_completion: &'c mut u32) -> Result<CommandList<'a, GpuCommands>, ()> {
+fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], present_completion: &'c mut u32) -> Result<(CommandList<'a, GpuCommands>, CommandListCompletion<'c>), ()> {
     let texture_config = TextureConfig {
         width: 512,
         height: 384,
@@ -24,7 +24,7 @@ fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], present_compl
         .configure_texture(0, &texture_config)?
         .set_constant_sampler_unorm8(0, [255, 0, 0, 255])?
         .clear_texture(0, 0)?
-        .present_texture(0, &present_completion, false)?;
+        .present_texture(0, present_completion, false)?;
     Ok((builder.finish(), present_completion))
 }
 
@@ -35,7 +35,7 @@ extern "C" fn main() {
     let mut command_list_bytes = [0u8; 1024];
     let (command_list, present_completion) = build_commandlist(&mut command_list_bytes[..], &mut present_completion_variable).unwrap();
     gpu_submit(command_list, &mut submit_completion_variable);
-
+    
     loop {
         wfi();
     }

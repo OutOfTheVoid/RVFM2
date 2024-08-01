@@ -28,7 +28,7 @@ impl WriteInstructionBytes for RegisterName {
             (EntryType::Vertex,   RegisterName::BuiltinS(ScalarBuiltin::ProvokingVertex)) => (0x01, REGTYPE_INPUT ),
 
             (EntryType::Vertex,   RegisterName::BuiltinS(ScalarBuiltin::Discard        )) => (0x00, REGTYPE_OUTPUT),
-            (EntryType::Vertex,   RegisterName::BuiltinV(VectorBuiltin::VertexPosition )) => (0x01, REGTYPE_OUTPUT),
+            (EntryType::Vertex,   RegisterName::BuiltinV(VectorBuiltin::VertexPosition )) => (0x00, REGTYPE_OUTPUT),
 
             (EntryType::Fragment, RegisterName::BuiltinV(VectorBuiltin::VertexPosition )) => (0x00, REGTYPE_INPUT ),
             (EntryType::Fragment, RegisterName::BuiltinV(VectorBuiltin::Barycentric    )) => (0x01, REGTYPE_INPUT ),

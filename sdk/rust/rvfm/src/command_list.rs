@@ -63,11 +63,11 @@ impl<'a, Commands> CommandListBuilder<'a, Commands> {
 pub struct CommandListCompletion<'c>(pub(crate) &'c mut u32);
 
 impl<'c> CommandListCompletion<'c> {
-    fn wait(&mut self) {
+    pub fn wait(&mut self) {
         while !self.poll() {}
     }
 
-    fn poll(&mut self) -> bool {
+    pub fn poll(&mut self) -> bool {
         unsafe { (self.0 as *mut u32).read_volatile() != 0 }
     }
 }

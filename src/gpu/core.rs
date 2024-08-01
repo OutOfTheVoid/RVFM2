@@ -5,25 +5,30 @@ use bytemuck::{Pod, cast_slice, cast_slice_mut};
 
 use crate::gpu::shader_parser::{self, parse_shader_bytecode, ShaderParseError};
 use crate::interrupt_controller::{INTERRUPT_CONTROLLER, InterruptType};
-use crate::machine::Machine;
+use crate::machine::{Machine, ReadResult};
 use crate::ui::main_window::MainWindow;
 use crate::command_list::{CommandList, retire_commandlist};
 
 use super::command::Command;
 use super::pipeline_state::GraphicsPipelineState;
-use super::shader::{ShaderModule, ShaderType};
-use super::texture::*;
+use super::shader::{ShaderModule, ShaderType, ShadingUnitConstantArray, ShadingUnitContext, ShadingUnitIOArray, ShadingUnitIOArrays};
+use super::rasterizer::{run_rasterizer, RasterRect, RasterizerCall};
+use super::{fragment_shader, texture::*};
 use super::buffer::*;
 use super::types::{ConstantSampler, VideoMode, PixelDataLayout, ImageDataLayout, PixelDataType, ColorBlendOp, AlphaBlendOp};
 
 pub struct Core {
-    command_lists:     Vec<CommandList>,
-    video_mode:        VideoMode,
-    constant_samplers: [ConstantSampler;       64],
-    textures:          [TextureModule;         64],
-    buffers:           [BufferModule;         256],
-    shaders:           [ShaderModule;         128],
-    graphics_states:   [GraphicsPipelineState; 32],
+    command_lists:      Vec<CommandList>,
+    video_mode:         VideoMode,
+    constant_samplers:  [ConstantSampler;       64],
+    textures:           [TextureModule;         64],
+    buffers:            [BufferModule;         256],
+    shaders:            [ShaderModule;         128],
+    graphics_states:    [GraphicsPipelineState; 32],
+    shader_context:     Box<ShadingUnitContext>,
+    shader_constants:   ShadingUnitConstantArray,
+    shader_io_arrays:   Box<ShadingUnitIOArrays>,
+
 }
 
 impl Core {
@@ -36,6 +41,9 @@ impl Core {
             buffers: [(); 256].map(|_| BufferModule::new()),
             shaders: [(); 128].map(|_| ShaderModule::default()),
             graphics_states: [(); 32].map(|_| GraphicsPipelineState::default()),
+            shader_context: ShadingUnitContext::new(),
+            shader_constants: ShadingUnitConstantArray::new(),
+            shader_io_arrays: ShadingUnitIOArrays::new(),
         }
     }
 
@@ -93,7 +101,16 @@ impl Core {
             Command::UploadShader { size, index, kind, address } =>
                 self.upload_shader(index, kind, size, address, machine),
             Command::UploadGraphicsPipelineState { index, flags, address } =>
-                self.upload_graphics_pipeline_state(index, flags, address, machine)
+                self.upload_graphics_pipeline_state(index, flags, address, machine),
+            Command::ConfigureGraphicsResourceMappings { pipeline, buffer_mapping_count, texture_mapping_count, buffer_mappings_addr, texture_mappings_addr } =>
+                self.configure_graphics_resource_mappings(buffer_mapping_count, texture_mapping_count, buffer_mappings_addr, texture_mappings_addr),
+            Command::DrawGraphicsPipeline { state_index, vertex_shader, fragment_shader, vertex_count, x_low, x_high, y_low, y_high } => {
+                let target_rect = RasterRect {
+                    upper_left:  (x_low  as u32, y_low  as u32),
+                    lower_right: (x_high as u32, y_high as u32),
+                };
+                self.draw_graphics_pipeline(state_index, vertex_shader, fragment_shader, vertex_count, target_rect)
+            },
         }
     }
 
@@ -196,9 +213,13 @@ impl Core {
     }
 
     fn upload_buffer(&mut self, buffer: u8, src_addr: u32, machine: &Arc<Machine>) {
+        println!("GPU: upload_buffer(buffer: {buffer}, src_addr: {:08X}) buffer_length: {:08X}", src_addr, self.buffers[buffer as usize].length);
         let buffer_slice = self.buffers[buffer as usize].bytes_mut();
         std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel);
-        let _ = machine.read_block(src_addr, buffer_slice);
+        match machine.read_block(src_addr, buffer_slice) {
+            ReadResult::Ok(_) => {},
+            ReadResult::InvalidAddress => println!("invalid buffer address!"),
+        }
     }
 
     fn direct_blit(&mut self, src_tex: u8, dst_tex: u8, src_x: u16, src_y: u16, dst_x: u16, dst_y: u16, width: u16, height: u16) {
@@ -405,25 +426,43 @@ impl Core {
         };
         let module = &mut self.shaders[(index & 0x7F) as usize];
         match parse_shader_bytecode(kind, &bytes[..], module) {
-            Ok(()) => {
-                println!("Shader parsed! Opcodes:");
-                println!("");
-                for i in 0..module.instruction_count {
-                    println!("    {:?}", module.instruction_buffer[i]);
-                }
-            },
-            Err(e) => println!("Shader bytecode parse failed: {:?}", e)
+            Ok(()) => {},
+            Err(e) => println!("GPU: shader bytecode parse failed: {:?}", e)
         }
     }
 
     fn upload_graphics_pipeline_state(&mut self, index: u8, flags: u8, address: u32, machine: &Arc<Machine>) {
-        println!("GPU: upload_shader(index: {}, flags: {:b}, address: {:08X}", index, flags, address);
+        println!("GPU: upload_graphics_pipeline_state(index: {}, flags: {:b}, address: {:08X}", index, flags, address);
         if let Some(state) = GraphicsPipelineState::read_from_address(address, machine) {
-            println!("Pipeline state: {:?}", state);
             self.graphics_states[index as usize] = state;
         } else {
             println!("Pipeline state upload failed");
         }
+    }
+
+    fn configure_graphics_resource_mappings(&mut self, buffer_count: u8, texture_count: u8, buffer_mapping_list_addr: u32, texture_mapping_list_addr: u32) {
+        println!("GPU: configure_graphics_resource_mappings(buffer_count: {}, texture_count: {}, buffer_mapping_list_addr: {}, texture_mapping_list_addr: {})", buffer_count, texture_count, buffer_mapping_list_addr, texture_mapping_list_addr);
+    }
+
+    fn draw_graphics_pipeline(&mut self, state: u8, vertex_shader: u8, fragment_shader: u8, vertex_count: u32, target_rect: RasterRect) {
+        let state = &self.graphics_states[state as usize];
+        let rasterizer_call = RasterizerCall {
+            constant_array: &mut self.shader_constants,
+            io_arrays: &mut self.shader_io_arrays.0,
+            buffer_modules: &mut self.buffers,
+            texture_modules: &mut self.textures,
+            shader_modules: &mut self.shaders,
+            vertex_count: vertex_count as usize,
+            shading_unit_context: &mut self.shader_context,
+            state: &state.raster_state,
+            vertex_shader,
+            fragment_shader,
+            vertex_state: &state.vertex_state,
+            fragment_state: &state.fragment_state,
+            target_rect,
+            resource_map: &state.raster_state.resource_map,
+        };
+        run_rasterizer(rasterizer_call);
     }
 }
 

@@ -122,9 +122,12 @@ pub fn run_vertex_shader(mut call: VertexShaderCall<'_>) -> Result<VertexShaderR
             },
             ShaderCardinality::V3 => {
                 (0..invocation_count).for_each(|i| {
-                    call.shading_unit_run_context.vector_input_array[input_assignment.input as usize][i][0] = read_fn(call.buffer_modules[input_assignment.src_buffer as usize].bytes(), input_assignment.offset as usize + input_assignment.stride as usize * i + element_size * 0);
-                    call.shading_unit_run_context.vector_input_array[input_assignment.input as usize][i][1] = read_fn(call.buffer_modules[input_assignment.src_buffer as usize].bytes(), input_assignment.offset as usize + input_assignment.stride as usize * i + element_size * 1);
-                    call.shading_unit_run_context.vector_input_array[input_assignment.input as usize][i][2] = read_fn(call.buffer_modules[input_assignment.src_buffer as usize].bytes(), input_assignment.offset as usize + input_assignment.stride as usize * i + element_size * 2);
+                    let offset_0 = input_assignment.offset as usize + input_assignment.stride as usize * i + element_size * 0;
+                    let offset_1 = input_assignment.offset as usize + input_assignment.stride as usize * i + element_size * 1;
+                    let offset_2 = input_assignment.offset as usize + input_assignment.stride as usize * i + element_size * 2;
+                    call.shading_unit_run_context.vector_input_array[input_assignment.input as usize][i][0] = read_fn(call.buffer_modules[input_assignment.src_buffer as usize].bytes(), offset_0);
+                    call.shading_unit_run_context.vector_input_array[input_assignment.input as usize][i][1] = read_fn(call.buffer_modules[input_assignment.src_buffer as usize].bytes(), offset_1);
+                    call.shading_unit_run_context.vector_input_array[input_assignment.input as usize][i][2] = read_fn(call.buffer_modules[input_assignment.src_buffer as usize].bytes(), offset_2);
                 });
             },
             ShaderCardinality::V4 => {

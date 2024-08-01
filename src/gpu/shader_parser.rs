@@ -147,5 +147,6 @@ pub fn parse_shader_bytecode(shader_type: ShaderType, code: &[u8], module: &mut 
         instruction += 1;
     }
     module.instruction_count = instruction;
+    module.shader_type = shader_type;
     Ok(())
 }

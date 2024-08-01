@@ -1,3 +1,5 @@
+#![feature(new_uninit)]
+
 use config::Config;
 use hart::{StepState, Hart};
 use machine::Machine;

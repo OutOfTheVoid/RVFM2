@@ -57,6 +57,13 @@ pub enum ShaderKind {
 
 pub struct GpuCommands;
 
+pub struct ClippingRect {
+    pub x_low: u16,
+    pub x_high: u16,
+    pub y_low: u16,
+    pub y_high: u16,
+}
+
 pub trait GpuCommandBuilderExt<'b>: Sized {
     fn clear_texture(self, texture: u8, constant_sampler: u8) -> Result<Self, ()>;
     fn present_texture<'c: 'b>(self, texture: u8, completion: &'c mut u32, interrupt: bool) -> Result<(Self, CommandListCompletion<'c>), ()>;
@@ -72,6 +79,8 @@ pub trait GpuCommandBuilderExt<'b>: Sized {
     fn cutout_blit(self, src_x: u8, src_y: u8, src_x: u16, src_y: u16, dst_x: u16, dst_y: u16, width: u16, height: u16, src_alpha_data_type: PixelDataType) -> Result<Self, ()>;
     fn upload_shader(self, index: u8, kind: ShaderKind, shader_code: &'static [u8]) -> Result<Self, ()>;
     fn upload_graphics_pipeline_state(self, index: u8, /*flags: u8, */state: &'static GraphicsPipelineState) -> Result<Self, ()>;
+    fn draw_graphics_pipeline(self, index: u8, vertex_shader: u8, fragment_shader: u8, vertex_count: u32, clipping_rect: ClippingRect) -> Result<Self, ()>;
+    
 }
 
 impl<'a> GpuCommandBuilderExt<'a> for CommandListBuilder<'a, GpuCommands> {
@@ -343,6 +352,41 @@ impl<'a> GpuCommandBuilderExt<'a> for CommandListBuilder<'a, GpuCommands> {
             state_address_bytes[1],
             state_address_bytes[2],
             state_address_bytes[3],
+        ];
+        self.push_command(data)
+    }
+
+    fn draw_graphics_pipeline(self, state_index: u8, vertex_shader: u8, fragment_shader: u8, vertex_count: u32, clipping_rect: ClippingRect) -> Result<Self, ()> {
+        let vertex_count_bytes = command_u32_bytes(vertex_count);
+        let clipping_rect_x_low_bytes  = command_u16_bytes(clipping_rect.x_low );
+        let clipping_rect_x_high_bytes = command_u16_bytes(clipping_rect.x_high);
+        let clipping_rect_y_low_bytes  = command_u16_bytes(clipping_rect.y_low );
+        let clipping_rect_y_high_bytes = command_u16_bytes(clipping_rect.y_high);
+        let data = &[
+            0x0F,
+            0x00,
+            state_index,
+            fragment_shader,
+
+            vertex_shader,
+            0x00,
+            0x00,
+            0x00,
+
+            vertex_count_bytes[0],
+            vertex_count_bytes[1],
+            vertex_count_bytes[2],
+            vertex_count_bytes[3],
+
+            clipping_rect_x_low_bytes[0],
+            clipping_rect_x_low_bytes[1],
+            clipping_rect_x_high_bytes[0],
+            clipping_rect_x_high_bytes[1],
+
+            clipping_rect_y_low_bytes[0],
+            clipping_rect_y_low_bytes[1],
+            clipping_rect_y_high_bytes[0],
+            clipping_rect_y_high_bytes[1],
         ];
         self.push_command(data)
     }

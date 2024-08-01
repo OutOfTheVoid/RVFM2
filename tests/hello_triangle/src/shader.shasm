@@ -2,4 +2,4 @@ entry_v
     mov vertex_position, vin_0
 
 entry_f
-    mov vout_0, vconst_1
+    mov vout_0, vconst_0

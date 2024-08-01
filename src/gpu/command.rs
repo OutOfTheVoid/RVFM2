@@ -143,6 +143,31 @@ pub enum Command {
         flags: u8,
         address: u32,
     },
+    /*
+    configure_graphics_resource_mappings <pipeline>      ..      < buffer_mapping_count > < texture_mapping_count > < buffer maps > < texture maps >
+    [                            0E 00 ] [     PP ] [ 00 00 00 ] [                   CC ] [                    KK ] [ BB BB BB BB ] [ TT TT TT TT  ]
+     */
+    ConfigureGraphicsResourceMappings {
+        pipeline: u8,
+        buffer_mapping_count: u8,
+        texture_mapping_count: u8,
+        buffer_mappings_addr: u32,
+        texture_mappings_addr: u32,
+    },
+    /*
+    draw_graphics_pipeline <state_index> <fragment shader> <vertex shader>      ..      < vertex count> < x low > < x high> < y low > < y high>
+    [              0F 00 ] [        II ] [            FF ] [          VV ] [ 00 00 00 ] [ CC CC CC CC ] [ xx xx ] [ XX XX ] [ yy yy ] [ YY YY ]
+     */
+    DrawGraphicsPipeline {
+        state_index: u8,
+        fragment_shader: u8,
+        vertex_shader: u8,
+        vertex_count: u32,
+        x_low: u16,
+        x_high: u16,
+        y_low: u16,
+        y_high: u16
+    },
 }
 
 impl Command {
@@ -218,12 +243,12 @@ impl Command {
             },
             Some(0x00_07) => {
                 let buffer = command_list.read_u8(offset + 3)?;
-                let length = command_list.read_u32(4)?;
+                let length = command_list.read_u32(offset + 4)?;
                 Some((offset + 8, Command::ConfigureBuffer { buffer, length }))
             },
             Some(0x00_08) => {
                 let buffer = command_list.read_u8(offset + 3)?;
-                let src_addr = command_list.read_u32(4)?;
+                let src_addr = command_list.read_u32(offset + 4)?;
                 Some((offset + 8, Command::UploadBuffer { buffer, src_addr }))
             },
             Some(0x00_09) => {
@@ -270,20 +295,32 @@ impl Command {
                 let index = command_list.read_u8(offset + 10)?;
                 let kind = command_list.read_u8(offset + 11)?;
                 let kind = ShaderType::from_u8(kind)?;
+                println!("UploadShader - index: {index}, kind: {:?}", kind);
                 Some((offset + 12, Command::UploadShader { size, index, kind, address }))
             },
             Some(0x00_0D) => {
                 let index = command_list.read_u8(offset + 2)?;
                 let flags = command_list.read_u8(offset + 3)?;
                 let address = command_list.read_u32(offset + 4)?;
-                println!("address: {:08X}", address);
                 Some((offset + 8, Command::UploadGraphicsPipelineState { index, flags, address }))
             },
             Some(0x00_0E) => {
                 None
             },
             Some(0x00_0F) => {
-                None
+                /*
+                draw_graphics_pipeline <state_index> <fragment shader> <vertex shader>      ..      < vertex count> < x low > < x high> < y low > < y high>
+                [              0F 00 ] [        II ] [            FF ] [          VV ] [ 00 00 00 ] [ CC CC CC CC ] [ xx xx ] [ XX XX ] [ yy yy ] [ YY YY ]
+                */
+                let state_index = command_list.read_u8(offset + 2)?;
+                let fragment_shader = command_list.read_u8(offset + 3 )?;
+                let vertex_shader = command_list.read_u8(offset + 4 )?;
+                let vertex_count = command_list.read_u32(offset + 8)?;
+                let x_low = command_list.read_u16(offset + 12)?;
+                let x_high = command_list.read_u16(offset + 14)?;
+                let y_low = command_list.read_u16(offset + 16)?;
+                let y_high = command_list.read_u16(offset + 18)?;
+                Some((offset + 20, Command::DrawGraphicsPipeline { state_index, vertex_count, fragment_shader, vertex_shader, x_low, x_high, y_low, y_high }))
             }
             _  => None,
         }

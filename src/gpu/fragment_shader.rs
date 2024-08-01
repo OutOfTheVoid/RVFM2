@@ -109,6 +109,7 @@ pub fn run_fragment_shader(mut call: FragmentShaderCall<'_>) {
 
     let mut shader = &call.shader_modules[call.shader as usize];
     if shader.shader_type != ShaderType::Fragment {
+        println!("GPU: ERROR: fragment shader supplied is not a fragment shader!");
         return;
     }
     let mut instructions = shader.instruction_buffer[0..shader.instruction_count].iter();
@@ -316,10 +317,15 @@ pub fn run_fragment_shader(mut call: FragmentShaderCall<'_>) {
             ShaderCardinality::V4 => {
                 let texture_index = call.resource_map.texture[output.texture as usize] as usize;
                 let texture = &mut call.texture_modules[texture_index];
+                println!("output pixel data format: {:?}", texture.config.pixel_layout);
                 let write_fn: fn(&mut TextureModule, u32, u32, [u32; 4]) -> () = match (output.t, texture.config.pixel_layout) {
-                    (FragmentOutputType::F32ToF32, PixelDataLayout::D32x2) => 
+                    (FragmentOutputType::F32ToF32, PixelDataLayout::D32x4) => 
                         |texture: &mut TextureModule, x: u32, y: u32, vector_value: [u32; 4]| {
                             texture.store::<[u32; 4]>(x, y, vector_value);
+                        },
+                    (FragmentOutputType::F32ToUNorm, PixelDataLayout::D8x4) => 
+                        |texture: &mut TextureModule, x: u32, y: u32, vector_value: [u32; 4]| {
+                            texture.store::<[u8; 4]>(x, y, vector_value.map(|x| f32_bits_to_unorm8_bits(x)));
                         },
                     _ => panic!("Unimplemented fragment output: {:?}", output),
                 };

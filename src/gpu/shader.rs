@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::mem::MaybeUninit;
 use std::ops::Rem;
 use std::ptr::read;
 use super::types::{PixelDataLayout, PixelDataType};
@@ -504,13 +505,14 @@ type InputOutputArray<T> = [[T; CORE_COUNT]; INPUT_OUTPUT_COUNT];
 type ConstantArray<T> = [T; CONST_COUNT];
 type FlagArray = [bool; CORE_COUNT];
 
+
 pub struct ShadingUnitConstantArray {
     pub scalar_constant_array: ConstantArray<u32>,
     pub vector_constant_array: ConstantArray<[u32; 4]>,
 }
 
 impl ShadingUnitConstantArray {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             scalar_constant_array: [ 0u32    ; CONST_COUNT],
             vector_constant_array: [[0u32; 4]; CONST_COUNT],
@@ -524,7 +526,7 @@ pub struct ShadingUnitIOArray {
 }
 
 impl ShadingUnitIOArray {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             scalar_array: [[ 0u32;     CORE_COUNT]; INPUT_OUTPUT_COUNT],
             vector_array: [[[0u32; 4]; CORE_COUNT]; INPUT_OUTPUT_COUNT],
@@ -532,8 +534,18 @@ impl ShadingUnitIOArray {
     }
 }
 
+pub struct ShadingUnitIOArrays(pub [ShadingUnitIOArray; 3]);
+
+impl ShadingUnitIOArrays {
+    pub fn new() -> Box<Self> {
+        let mut box_uninit = Box::new_zeroed();
+        unsafe { Box::<MaybeUninit<Self>>::assume_init(box_uninit) }
+    }
+}
+
 pub fn setup_shader_constants<'a>(constant_array: &'a mut ShadingUnitConstantArray, constants: &[ShaderConstantAssignment], resource_map: &ResourceMap, buffer_modules: &mut [BufferModule; 256]) {
     for constant_assignment in constants.iter() {
+        println!("Shader constant assignment: {:?}", constant_assignment);
         let buffer_index = resource_map.buffer[constant_assignment.source_buffer as usize] as usize;
         let bytes = buffer_modules[buffer_index].bytes();
         let read_fn = match constant_assignment.t {
@@ -664,17 +676,12 @@ impl<T> RegisterReadPtr<T> {
 
 impl ShadingUnitContext {
     pub fn new() -> Box<Self> {
-        Box::new(Self {
-            scalar_stack_array: [[ 0;     CORE_COUNT]; STACK_SIZE],
-            scalar_stack_size:  0,
-            vector_stack_array: [[[0; 4]; CORE_COUNT]; STACK_SIZE],
-            vector_stack_size:  0,
-            scalar_locals:      [[ 0;     CORE_COUNT]; LOCAL_COUNT],
-            vector_locals:      [[[0; 4]; CORE_COUNT]; LOCAL_COUNT],
-        })
+        let mut box_uninit = Box::new_zeroed();
+        unsafe { Box::<MaybeUninit<Self>>::assume_init(box_uninit) }
     }
 
     pub fn run_instruction<'io, 'rc>(&mut self, n: usize, instruction: &ShaderInstruction, run_context: &'rc mut ShadingUnitRunContext<'io>, buffer_modules: &mut [BufferModule; 256], texture_modules: &mut [TextureModule; 64], resource_map: &ResourceMap) -> Option<()> {
+        println!("run_instruction: {:?}", instruction);
         match instruction {
             ShaderInstruction::Nop => {},
             ShaderInstruction::PushVector(register) => {
@@ -1986,19 +1993,19 @@ pub(crate) fn read_bytes_u16(bytes: &[u8], offset: usize) -> u16 {
     if offset + 2 > bytes.len() {
         0
     } else {
-        ((bytes[offset] as u16) << 0) |
-        ((bytes[offset] as u16) << 8)
+        ((bytes[offset + 1] as u16) << 0) |
+        ((bytes[offset + 0] as u16) << 8)
     }
 }
 
 pub(crate) fn read_bytes_u32(bytes: &[u8], offset: usize) -> u32 {
-    if offset + 4 > bytes.len() {
+    if (offset + 4) > bytes.len() {
         0
     } else {
-        ((bytes[offset] as u32) <<  0) |
-        ((bytes[offset] as u32) <<  8) |
-        ((bytes[offset] as u32) << 16) |
-        ((bytes[offset] as u32) << 24)
+        ((bytes[offset + 0] as u32) <<  0) |
+        ((bytes[offset + 1] as u32) <<  8) |
+        ((bytes[offset + 2] as u32) << 16) |
+        ((bytes[offset + 3] as u32) << 24)
     }
 }
 
@@ -2028,27 +2035,27 @@ fn write_bytes_u32(from: &[u32], to: &mut [u8], offset: usize) {
     }
 }
 
-fn f32_bits_to_inorm8_bits(bits: u32) -> u8 {
+pub fn f32_bits_to_inorm8_bits(bits: u32) -> u8 {
     (f32::from_bits(bits) * std::i8::MAX as f32) as i32 as i8 as u8
 }
 
-fn f32_bits_to_unorm8_bits(bits: u32) -> u8 {
+pub fn f32_bits_to_unorm8_bits(bits: u32) -> u8 {
     (f32::from_bits(bits) * std::u8::MAX as f32) as u32 as u8
 }
 
-fn f32_bits_to_inorm16_bits(bits: u32) -> u16 {
+pub fn f32_bits_to_inorm16_bits(bits: u32) -> u16 {
     (f32::from_bits(bits) * std::i16::MAX as f32) as i32 as i16 as u16
 }
 
-fn f32_bits_to_unorm16_bits(bits: u32) -> u16 {
+pub fn f32_bits_to_unorm16_bits(bits: u32) -> u16 {
     (f32::from_bits(bits) * std::u16::MAX as f32) as u32 as u16
 }
 
-fn f32_bits_to_inorm32_bits(bits: u32) -> u32 {
+pub fn f32_bits_to_inorm32_bits(bits: u32) -> u32 {
     (f32::from_bits(bits) * std::i32::MAX as f32) as i32 as u32
 }
 
-fn f32_bits_to_unorm32_bits(bits: u32) -> u32 {
+pub fn f32_bits_to_unorm32_bits(bits: u32) -> u32 {
     (f32::from_bits(bits) * std::u32::MAX as f32) as u32
 }
 
