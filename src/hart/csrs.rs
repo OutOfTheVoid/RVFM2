@@ -113,6 +113,10 @@ impl CSRs {
         }
     }
 
+    pub fn hart_id(&self) -> u32 {
+        self.mhartid
+    }
+
     pub fn reset(&mut self) {
         self.mstatus.reset();
         self.mtvec.reset();

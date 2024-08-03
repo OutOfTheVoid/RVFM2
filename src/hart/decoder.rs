@@ -3,79 +3,91 @@ pub enum Rv32Op {
     Unknown,
 
     // RV32I Base instruction set
-    Lui   {immediate: u32, rd: u8},
-    Auipc {immediate: u32, rd: u8},
+    Lui     {immediate: u32, rd: u8},
+    Auipc  {immediate: u32, rd: u8},
+  
+    Jal     {immediate: u32, rd: u8},
+    Jalr    {immediate: i32, rd: u8, rs1: u8},
 
-    Jal   {immediate: u32, rd: u8},
-    Jalr  {immediate: i32, rd: u8, rs1: u8},
+    Beq     {immediate: i32, rs2: u8, rs1: u8},
+    Bne     {immediate: i32, rs2: u8, rs1: u8},
+    Blt     {immediate: i32, rs2: u8, rs1: u8},
+    Bge     {immediate: i32, rs2: u8, rs1: u8},
+    Bltu    {immediate: i32, rs2: u8, rs1: u8},
+    Bgeu    {immediate: i32, rs2: u8, rs1: u8},
 
-    Beq   {immediate: i32, rs2: u8, rs1: u8},
-    Bne   {immediate: i32, rs2: u8, rs1: u8},
-    Blt   {immediate: i32, rs2: u8, rs1: u8},
-    Bge   {immediate: i32, rs2: u8, rs1: u8},
-    Bltu  {immediate: i32, rs2: u8, rs1: u8},
-    Bgeu  {immediate: i32, rs2: u8, rs1: u8},
+    Lb      {immediate: i32, rd: u8, rs1: u8},
+    Lh      {immediate: i32, rd: u8, rs1: u8},
+    Lw      {immediate: i32, rd: u8, rs1: u8},
+    Lbu     {immediate: i32, rd: u8, rs1: u8},
+    Lhu     {immediate: i32, rd: u8, rs1: u8},
 
-    Lb    {immediate: i32, rd: u8, rs1: u8},
-    Lh    {immediate: i32, rd: u8, rs1: u8},
-    Lw    {immediate: i32, rd: u8, rs1: u8},
-    Lbu   {immediate: i32, rd: u8, rs1: u8},
-    Lhu   {immediate: i32, rd: u8, rs1: u8},
+    Sb      {immediate: i32, rs1: u8, rs2: u8},
+    Sh      {immediate: i32, rs1: u8, rs2: u8},
+    Sw      {immediate: i32, rs1: u8, rs2: u8},
 
-    Sb    {immediate: i32, rs1: u8, rs2: u8},
-    Sh    {immediate: i32, rs1: u8, rs2: u8},
-    Sw    {immediate: i32, rs1: u8, rs2: u8},
+    Addi    {immediate: i32, rd: u8, rs1: u8},
+    Slti    {immediate: i32, rd: u8, rs1: u8},
+    Sltiu   {immediate: u32, rd: u8, rs1: u8},
+    Xori    {immediate: u32, rd: u8, rs1: u8},
+    Ori     {immediate: u32, rd: u8, rs1: u8},
+    Andi    {immediate: u32, rd: u8, rs1: u8},
 
-    Addi  {immediate: i32, rd: u8, rs1: u8},
-    Slti  {immediate: i32, rd: u8, rs1: u8},
-    Sltiu {immediate: u32, rd: u8, rs1: u8},
-    Xori  {immediate: u32, rd: u8, rs1: u8},
-    Ori   {immediate: u32, rd: u8, rs1: u8},
-    Andi  {immediate: u32, rd: u8, rs1: u8},
+    Slli    {shamt: u8, rd: u8, rs1: u8},
+    Srli    {shamt: u8, rd: u8, rs1: u8},
+    Srai    {shamt: u8, rd: u8, rs1: u8},
 
-    Slli  {shamt: u8, rd: u8, rs1: u8},
-    Srli  {shamt: u8, rd: u8, rs1: u8},
-    Srai  {shamt: u8, rd: u8, rs1: u8},
+    Add     {rd: u8, rs1: u8, rs2: u8},
+    Sub     {rd: u8, rs1: u8, rs2: u8},
+    Sll     {rd: u8, rs1: u8, rs2: u8},
+    Slt     {rd: u8, rs1: u8, rs2: u8},
+    Sltu    {rd: u8, rs1: u8, rs2: u8},
+    Xor     {rd: u8, rs1: u8, rs2: u8},
+    Srl     {rd: u8, rs1: u8, rs2: u8},
+    Sra     {rd: u8, rs1: u8, rs2: u8},
+    Or      {rd: u8, rs1: u8, rs2: u8},
+    And     {rd: u8, rs1: u8, rs2: u8},
 
-    Add   {rd: u8, rs1: u8, rs2: u8},
-    Sub   {rd: u8, rs1: u8, rs2: u8},
-    Sll   {rd: u8, rs1: u8, rs2: u8},
-    Slt   {rd: u8, rs1: u8, rs2: u8},
-    Sltu  {rd: u8, rs1: u8, rs2: u8},
-    Xor   {rd: u8, rs1: u8, rs2: u8},
-    Srl   {rd: u8, rs1: u8, rs2: u8},
-    Sra   {rd: u8, rs1: u8, rs2: u8},
-    Or    {rd: u8, rs1: u8, rs2: u8},
-    And   {rd: u8, rs1: u8, rs2: u8},
-
-    Fence {predecessor: FenceOps, successor: FenceOps},
+    Fence   {predecessor: FenceOps, successor: FenceOps},
     
     Fencei,
     
     Ecall,
     EBreak,
 
-    Csrrw {csr: u16, rd: u8, rs1: u8},
-    Csrrs {csr: u16, rd: u8, rs1: u8},
-    Csrrc {csr: u16, rd: u8, rs1: u8},
+    Csrrw   {csr: u16, rd: u8, rs1: u8},
+    Csrrs   {csr: u16, rd: u8, rs1: u8},
+    Csrrc   {csr: u16, rd: u8, rs1: u8},
 
-    Csrrwi{csr: u16, rd: u8, immediate: u8},
-    Csrrsi{csr: u16, rd: u8, immediate: u8},
-    Csrrci{csr: u16, rd: u8, immediate: u8},
-
-    // RV32M Multiply Divide extension
-    Mul   {rd: u8, rs1: u8, rs2: u8},
-    Mulh  {rd: u8, rs1: u8, rs2: u8},
-    Mulhsu{rd: u8, rs1: u8, rs2: u8},
-    Mulhu {rd: u8, rs1: u8, rs2: u8},
-    Div   {rd: u8, rs1: u8, rs2: u8},
-    Divu  {rd: u8, rs1: u8, rs2: u8},
-    Rem   {rd: u8, rs1: u8, rs2: u8},
-    Remu  {rd: u8, rs1: u8, rs2: u8},
+    Csrrwi  {csr: u16, rd: u8, immediate: u8},
+    Csrrsi  {csr: u16, rd: u8, immediate: u8},
+    Csrrci  {csr: u16, rd: u8, immediate: u8},
 
     Wfi,
-
     Mret,
+
+    // RV32M Multiply Divide extension
+    Mul     {rd: u8, rs1: u8, rs2: u8},
+    Mulh    {rd: u8, rs1: u8, rs2: u8},
+    Mulhsu  {rd: u8, rs1: u8, rs2: u8},
+    Mulhu   {rd: u8, rs1: u8, rs2: u8},
+    Div     {rd: u8, rs1: u8, rs2: u8},
+    Divu    {rd: u8, rs1: u8, rs2: u8},
+    Rem     {rd: u8, rs1: u8, rs2: u8},
+    Remu    {rd: u8, rs1: u8, rs2: u8},
+
+    // RV32A Atomics
+    Lr      {acquire: bool, release: bool,          rs1: u8, rd: u8},
+    Sc      {acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8},
+    AmoSwap {acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8},
+    AmoAdd  {acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8},
+    AmoXor  {acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8},
+    AmoAnd  {acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8},
+    AmoOr   {acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8},
+    AmoMin  {acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8},
+    AmoMax  {acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8},
+    AmoMinU {acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8},
+    AmoMaxU {acquire: bool, release: bool, rs2: u8, rs1: u8, rd: u8},
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq)]
@@ -184,15 +196,6 @@ impl Rv32Op {
                 let rs2 = field::<20, 24>(codeword) as u8;
                 let immediate = btype_immediate(codeword);
                 match funct3 {
-                    /*
-31          25    24 20   19 15   14 12    11        7   6     0
- imm[12|10:5]      rs2     rs1     000     imm[4:1|11]   1100011   BEQ
- imm[12|10:5]      rs2     rs1     001     imm[4:1|11]   1100011   BNE
- imm[12|10:5]      rs2     rs1     100     imm[4:1|11]   1100011   BLT
- imm[12|10:5]      rs2     rs1     101     imm[4:1|11]   1100011   BGE
- imm[12|10:5]      rs2     rs1     110     imm[4:1|11]   1100011   BLTU
- imm[12|10:5]      rs2     rs1     111     imm[4:1|11]   1100011   BGEU
-                    */
                     0b000 => Self::Beq  { immediate, rs1, rs2 },
                     0b001 => Self::Bne  { immediate, rs1, rs2 },
                     0b100 => Self::Blt  { immediate, rs1, rs2 },
@@ -327,7 +330,29 @@ impl Rv32Op {
                     0b111 => Self::Csrrci { csr, rd, immediate },
                     _     => Self::Unknown
                 }
-            }
+            },
+            (0b0101111, 0b010) => {
+                let funct5 = field::<27, 31>(codeword);
+                let acquire = field::<26, 26>(codeword) != 0;
+                let release = field::<25, 25>(codeword) != 0;
+                let rs1 = field::<15, 19>(codeword) as u8;
+                let rs2 = field::<20, 24>(codeword) as u8;
+                let rd = field::<7, 11>(codeword) as u8;
+                match (funct5, rs2) {
+                    (0b00010, 0  ) => Self::Lr      { acquire, release, rs1,      rd },
+                    (0b00011, rs2) => Self::Sc      { acquire, release, rs2, rs1, rd },
+                    (0b00001, rs2) => Self::AmoSwap { acquire, release, rs2, rs1, rd },
+                    (0b00000, rs2) => Self::AmoAdd  { acquire, release, rs2, rs1, rd },
+                    (0b00100, rs2) => Self::AmoXor  { acquire, release, rs2, rs1, rd },
+                    (0b01100, rs2) => Self::AmoAnd  { acquire, release, rs2, rs1, rd },
+                    (0b01000, rs2) => Self::AmoOr   { acquire, release, rs2, rs1, rd },
+                    (0b10000, rs2) => Self::AmoMin  { acquire, release, rs2, rs1, rd },
+                    (0b10100, rs2) => Self::AmoMax  { acquire, release, rs2, rs1, rd },
+                    (0b11000, rs2) => Self::AmoMinU { acquire, release, rs2, rs1, rd },
+                    (0b11100, rs2) => Self::AmoMaxU { acquire, release, rs2, rs1, rd },
+                    _ => Self::Unknown,
+                }
+            },
             _ => Self::Unknown,
         }
     }

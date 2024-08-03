@@ -41,6 +41,8 @@ impl FragmentOutputType {
 
 pub const FRAGMENT_VECTOR_INPUT_BUILTIN_POSITION    : usize = 0x00;
 pub const FRAGMENT_VECTOR_INPUT_BUILTIN_BARYCENTRIC : usize = 0x01;
+pub const FRAGMENT_VECTOR_INPUT_BUILTIN_LINEAR      : usize = 0x02;
+pub const FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS  : usize = 0x03;
 pub const FRAGMENT_VECTOR_INPUT_USER_OFFSET         : usize = 0x10;
 
 pub const FRAGMENT_SCALAR_OUTPUT_BUILTIN_DISCARD : usize = 0x00;

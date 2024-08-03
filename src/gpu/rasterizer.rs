@@ -225,55 +225,189 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
                 let x_max = x_max.floor() as u32;
                 for x in x_min..=x_max {
                     let mut areas = [0.0; 3];
+                    let mut lengths = [0.0; 3];
                     for e in 0..3 {
+                        let dx_pa = x as f32 - points[3][0];
+                        let dy_pa = y as f32 - points[3][1];
                         let dx_pb = x as f32 - points[e + 1][0];
                         let dy_pb = y as f32 - points[e + 1][1];
                         let dx_pc = x as f32 - points[e + 2][0];
                         let dy_pc = y as f32 - points[e + 2][1];
-                        areas[e] = (dx_pc  * dy_pb) - (dx_pb * dy_pc);
+                        areas[e] = (dx_pc * dy_pb) - (dx_pb * dy_pc);
+                        lengths[e] = ((dx_pa * dx_pa) + (dy_pa * dy_pa)).sqrt();
                     }
-                    let area_sum = areas[0] + areas[1] + areas[2];
-                    let b0 = areas[0] / area_sum;
-                    let b1 = areas[1] / area_sum;
-                    let b2 = areas[2] / area_sum;
+                    let recip_length_sum = 1.0 / (lengths[0] + lengths[1] + lengths[2]);
+                    let recip_area_sum = 1.0 / (areas[0] + areas[1] + areas[2]);
+                    let b0 = areas[0] * recip_area_sum;
+                    let b1 = areas[1] * recip_area_sum;
+                    let b2 = areas[2] * recip_area_sum;
+                    let l0 = lengths[0] * recip_length_sum;
+                    let l1 = lengths[1] * recip_length_sum;
+                    let l2 = lengths[2] * recip_length_sum;
                     let z = p0[2] * b0 + p1[2] * b1 + p2[2] * b2;
                     call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_POSITION   ][fragment_invocation_count] = [(x as f32).to_bits(), (y as f32).to_bits(), (z as f32).to_bits(), 0];
                     call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_BARYCENTRIC][fragment_invocation_count] = [b0.to_bits(), b1.to_bits(), b2.to_bits(), 0];
+                    call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_LINEAR     ][fragment_invocation_count] = [l0.to_bits(), l1.to_bits(), l2.to_bits(), 0];
+                    call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS ][fragment_invocation_count] = [v0 as u32, v1 as u32, v2 as u32, 0];
                     
-                    // TODO: figure out how to speed this up - likely this will require some kind of "triangle buffer" so we can have provoking vertex and interpolation source information
-                    // on a [for each varying per shader core] basis, rather than [for each core, per varying], linearizing IO register access and making it easier to vectorize
-                    for varying in call.state.varyings.iter() {
-                        match varying.t {
-                            ShaderVaryingType::F32x3(Interpolation::ProvokingVertexFlat) |
-                            ShaderVaryingType::I32x3(Interpolation::ProvokingVertexFlat) => {
-                                call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count][0] = call.io_arrays[1].vector_array[varying.slot as usize][v0][0];
-                                call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count][1] = call.io_arrays[1].vector_array[varying.slot as usize][v0][1];
-                                call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count][2] = call.io_arrays[1].vector_array[varying.slot as usize][v0][2];
-                            },
-                            ShaderVaryingType::F32x4(Interpolation::ProvokingVertexFlat) |
-                            ShaderVaryingType::I32x4(Interpolation::ProvokingVertexFlat) => {
-                                call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count] = call.io_arrays[1].vector_array[varying.slot as usize][v0];
-                            },
-                            ShaderVaryingType::F32x4(Interpolation::Smooth) => {
-                                let val_0 = call.io_arrays[1].vector_array[varying.slot as usize][v0].map(|x| f32::from_bits(x));
-                                let val_1 = call.io_arrays[1].vector_array[varying.slot as usize][v1].map(|x| f32::from_bits(x));
-                                let val_2 = call.io_arrays[1].vector_array[varying.slot as usize][v2].map(|x| f32::from_bits(x));
-                                call.io_arrays[2].vector_array[varying.slot as usize][fragment_invocation_count] = [0, 1, 2, 3].map(|c| (val_0[c] * b0 + val_1[c] * b1 + val_2[c] * b2).to_bits());
-                            },
-                            _ => println!("GPU ERROR: shader varying type {:?} unimplemented!", varying.t),
-                        }
-                    }
                     fragment_invocation_count += 1;
 
                     if fragment_invocation_count == CORE_COUNT {
                         fragment_invocation_count = 0;
+                        compute_varying_values(CORE_COUNT, &mut call);
                         invoke_fragment_shader(CORE_COUNT, &mut call);
                     }
                 }
             }
         }
         if fragment_invocation_count > 0 {
+            compute_varying_values(fragment_invocation_count, &mut call);
             invoke_fragment_shader(fragment_invocation_count, &mut call);
+        }
+    }
+}
+
+fn compute_varying_values(invocation_count: usize, call: &mut RasterizerCall<'_>) {
+    for varying in call.state.varyings.iter() {
+        match varying.t {
+            ShaderVaryingType::F32x4(Interpolation::ProvokingVertexFlat) |
+            ShaderVaryingType::I32x4(Interpolation::ProvokingVertexFlat) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, _, _, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    call.io_arrays[2].vector_array[varying.slot as usize][i] = call.io_arrays[1].vector_array[varying.slot as usize][v0 as usize];
+                });
+            },
+            ShaderVaryingType::F32x3(Interpolation::ProvokingVertexFlat) |
+            ShaderVaryingType::I32x3(Interpolation::ProvokingVertexFlat) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, _, _, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    let value: [u32; 3] = call.io_arrays[1].vector_array[varying.slot as usize][v0 as usize][0..=2].try_into().unwrap();
+                    call.io_arrays[2].vector_array[varying.slot as usize][i][0..=2].copy_from_slice(&value);
+                });
+            },
+            ShaderVaryingType::F32x2(Interpolation::ProvokingVertexFlat) |
+            ShaderVaryingType::I32x2(Interpolation::ProvokingVertexFlat) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, _, _, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    let value: [u32; 2] = call.io_arrays[1].vector_array[varying.slot as usize][v0 as usize][0..=1].try_into().unwrap();
+                    call.io_arrays[2].vector_array[varying.slot as usize][i][0..=1].copy_from_slice(&value);
+                });
+            },
+            ShaderVaryingType::F32(Interpolation::ProvokingVertexFlat) |
+            ShaderVaryingType::I32(Interpolation::ProvokingVertexFlat) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, _, _, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    call.io_arrays[2].scalar_array[varying.slot as usize][i] = call.io_arrays[1].scalar_array[varying.slot as usize][v0 as usize];
+                });
+            },
+            ShaderVaryingType::F32x4(Interpolation::Smooth) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, v1, v2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    let [b0, b1, b2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_BARYCENTRIC][i].map(|x| f32::from_bits(x));
+                    call.io_arrays[2].vector_array[varying.slot as usize][i] = [0, 1, 2, 3].map(|c| {
+                        (
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v0 as usize][c]) * b0 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v1 as usize][c]) * b1 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v2 as usize][c]) * b2
+                        ).to_bits()
+                    });
+                });
+            },
+            ShaderVaryingType::F32x3(Interpolation::Smooth) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, v1, v2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    let [b0, b1, b2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_BARYCENTRIC][i].map(|x| f32::from_bits(x));
+                    let value = [0, 1, 2].map(|c| {
+                        (
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v0 as usize][c]) * b0 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v1 as usize][c]) * b1 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v2 as usize][c]) * b2
+                        ).to_bits()
+                    });
+                    call.io_arrays[2].vector_array[varying.slot as usize][i][0..=2].copy_from_slice(&value);
+                });
+            },
+            ShaderVaryingType::F32x2(Interpolation::Smooth) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, v1, v2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    let [b0, b1, b2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_BARYCENTRIC][i].map(|x| f32::from_bits(x));
+                    let value = [0, 1].map(|c| {
+                        (
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v0 as usize][c]) * b0 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v1 as usize][c]) * b1 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v2 as usize][c]) * b2
+                        ).to_bits()
+                    });
+                    call.io_arrays[2].vector_array[varying.slot as usize][i][0..=1].copy_from_slice(&value);
+                });
+            },
+            ShaderVaryingType::F32(Interpolation::Smooth) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, v1, v2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    let [b0, b1, b2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_BARYCENTRIC][i].map(|x| f32::from_bits(x));
+                    call.io_arrays[2].scalar_array[varying.slot as usize][i] =
+                        (
+                            f32::from_bits(call.io_arrays[1].scalar_array[varying.slot as usize][v0 as usize]) * b0 +
+                            f32::from_bits(call.io_arrays[1].scalar_array[varying.slot as usize][v1 as usize]) * b1 +
+                            f32::from_bits(call.io_arrays[1].scalar_array[varying.slot as usize][v2 as usize]) * b2
+                        ).to_bits()
+                });
+            },
+
+            ShaderVaryingType::F32x4(Interpolation::Linear) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, v1, v2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    let [b0, b1, b2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_LINEAR    ][i].map(|x| f32::from_bits(x));
+                    call.io_arrays[2].vector_array[varying.slot as usize][i] = [0, 1, 2, 3].map(|c| {
+                        (
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v0 as usize][c]) * b0 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v1 as usize][c]) * b1 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v2 as usize][c]) * b2
+                        ).to_bits()
+                    });
+                });
+            },
+            ShaderVaryingType::F32x3(Interpolation::Linear) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, v1, v2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    let [b0, b1, b2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_LINEAR    ][i].map(|x| f32::from_bits(x));
+                    let value = [0, 1, 2].map(|c| {
+                        (
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v0 as usize][c]) * b0 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v1 as usize][c]) * b1 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v2 as usize][c]) * b2
+                        ).to_bits()
+                    });
+                    call.io_arrays[2].vector_array[varying.slot as usize][i][0..=2].copy_from_slice(&value);
+                });
+            },
+            ShaderVaryingType::F32x2(Interpolation::Linear) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, v1, v2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    let [b0, b1, b2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_LINEAR    ][i].map(|x| f32::from_bits(x));
+                    let value = [0, 1].map(|c| {
+                        (
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v0 as usize][c]) * b0 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v1 as usize][c]) * b1 +
+                            f32::from_bits(call.io_arrays[1].vector_array[varying.slot as usize][v2 as usize][c]) * b2
+                        ).to_bits()
+                    });
+                    call.io_arrays[2].vector_array[varying.slot as usize][i][0..=1].copy_from_slice(&value);
+                });
+            },
+            ShaderVaryingType::F32(Interpolation::Linear) => {
+                (0..invocation_count).for_each(|i| {
+                    let [v0, v1, v2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_VERTEX_IDS][i];
+                    let [b0, b1, b2, _] = call.io_arrays[2].vector_array[FRAGMENT_VECTOR_INPUT_BUILTIN_LINEAR    ][i].map(|x| f32::from_bits(x));
+                    call.io_arrays[2].scalar_array[varying.slot as usize][i] =
+                        (
+                            f32::from_bits(call.io_arrays[1].scalar_array[varying.slot as usize][v0 as usize]) * b0 +
+                            f32::from_bits(call.io_arrays[1].scalar_array[varying.slot as usize][v1 as usize]) * b1 +
+                            f32::from_bits(call.io_arrays[1].scalar_array[varying.slot as usize][v2 as usize]) * b2
+                        ).to_bits()
+                });
+            },
+            _ => println!("GPU ERROR: varying interpolation mode {:?} unimplemented!", varying.t),
         }
     }
 }

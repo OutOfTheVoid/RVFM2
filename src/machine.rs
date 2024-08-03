@@ -1,4 +1,6 @@
-use std::{ops::RangeInclusive, sync::Arc};
+use std::{ops::RangeInclusive, sync::{atomic::{self, AtomicU32}, Arc}};
+
+use parking_lot::Mutex;
 
 use crate::{debug::*, gpu::*, hart_clock::{clock_read_u16, clock_read_u32, clock_read_u8, clock_write_u16, clock_write_u32, clock_write_u8}, input::*, interrupt_controller::{interrupt_controller_read_u16, interrupt_controller_read_u32, interrupt_controller_read_u8, interrupt_controller_write_u16, interrupt_controller_write_u32, interrupt_controller_write_u8}, spu::{spu_init, spu_read_u16, spu_read_u32, spu_read_u8, spu_write_u16, spu_write_u32, spu_write_u8, SpuStreamHandle}, ui::main_window::{self, MainWindow}};
 
@@ -52,9 +54,29 @@ impl<T> ReadResult<T> {
     }
 }
 
+pub enum AtomicLoadResult {
+    Ok(u32),
+    AlignmentError,
+    InvalidAddress
+}
+
+pub enum AtomicStoreConditionalResult {
+    Ok,
+    ReservationExpired,
+    AlignmentError,
+    InvalidAddress,
+}
+
+pub enum AtomicOperationResult {
+    Ok(u32),
+    AlignmentError,
+    InvalidAddress,
+}
+
 pub struct Machine {
     pub ram: *mut u8,
     pub rom: *mut u8,
+    pub atomic_reservations: Box<[Mutex<u32>]>,
 }
 
 pub struct MachineMainThread {
@@ -91,10 +113,14 @@ impl Machine {
     pub fn new(rom_data: &[u8], main_window: MainWindow) -> (Arc<Self>, MachineMainThread) {
         let ram = Box::leak(vec![0u8; 0x800_0000].into_boxed_slice()).as_mut_ptr();
         let rom = Box::leak(vec![0u8; 0x800_0000].into_boxed_slice()).as_mut_ptr();
+        let mut atomic_reservations = Vec::new();
+        (0..0x20_0000).for_each(|_| atomic_reservations.push(Mutex::new(0)));
+        let atomic_reservations = atomic_reservations.into_boxed_slice();
         unsafe { std::slice::from_raw_parts_mut(rom, rom_data.len().min(0x800_000)).copy_from_slice(rom_data) };
         let machine = Arc::new(Self {
             ram,
             rom,
+            atomic_reservations
         });
         gpu_init(&machine, main_window);
         let spu_stream = spu_init(&machine);
@@ -256,6 +282,71 @@ impl Machine {
             }
         }
         WriteResult::Ok
+    }
+
+    pub fn load_reserve(self: &Arc<Self>, addr: u32, hart_id: u32) -> AtomicLoadResult {
+        match addr {
+            0x0000_0000 ..= 0x07FF_FFFC => {
+                if addr & 3 != 0 {
+                    AtomicLoadResult::AlignmentError
+                } else {
+                    let atomic_line = addr >> 6;
+                    let mut reservation = self.atomic_reservations[atomic_line as usize].lock();
+                    *reservation = hart_id;
+                    let value = self.read_u32(addr).unwrap();
+                    AtomicLoadResult::Ok(value)
+                }
+            },
+            _ => AtomicLoadResult::InvalidAddress,
+        }
+    }
+
+    pub fn store_conditional(self: &Arc<Self>, addr: u32, value: u32, hart_id: u32) -> AtomicStoreConditionalResult {
+        match addr {
+            0x0000_0000 ..= 0x07FF_FFFC => {
+                if addr & 3 != 0 {
+                    AtomicStoreConditionalResult::AlignmentError
+                } else {
+                    let atomic_line = addr >> 6;
+                    let reservation = self.atomic_reservations[atomic_line as usize].lock();
+                    if *reservation == hart_id {
+                        if self.write_u32(addr, value).is_ok() {
+                            AtomicStoreConditionalResult::Ok
+                        } else {
+                            AtomicStoreConditionalResult::InvalidAddress
+                        }
+                    } else {
+                        AtomicStoreConditionalResult::ReservationExpired
+                    }
+                }
+            },
+            _ => AtomicStoreConditionalResult::InvalidAddress,
+        }
+    }
+
+    pub fn atomic_operation(self: &Arc<Self>, addr: u32, value_b: u32, op: impl Fn(u32, u32) -> u32) -> AtomicOperationResult {
+        match addr {
+            0x0000_0000 ..= 0x07FF_FFFC => {
+                if addr & 3 != 0 {
+                    AtomicOperationResult::AlignmentError
+                } else {
+                    let atomic_line = addr >> 6;
+                    let reservation = self.atomic_reservations[atomic_line as usize].lock();
+                    match self.read_u32(addr) {
+                        ReadResult::Ok(value) => {
+                            let modified = op(value, value_b);
+                            match self.write_u32(addr, modified) {
+                                WriteResult::Ok => AtomicOperationResult::Ok(value),
+                                WriteResult::ReadOnly |
+                                WriteResult::InvalidAddress => AtomicOperationResult::InvalidAddress,
+                            }
+                        },
+                        ReadResult::InvalidAddress => AtomicOperationResult::InvalidAddress,
+                    }
+                }
+            },
+            _ => AtomicOperationResult::InvalidAddress,
+        }
     }
 
     fn ram_write<T>(self: &Arc<Self>, offset: u32, value: T) {

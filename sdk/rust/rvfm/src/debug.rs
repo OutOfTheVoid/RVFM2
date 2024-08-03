@@ -5,11 +5,11 @@ static volatile       u32* const debug_status        = (volatile       u32* cons
 static volatile       u32* const debug_print_trigger = (volatile       u32* const) 0x8000000C;
 */
 
-const DEBUG_MESSAGE_PTR    : *mut *const u8 = 0x8000_0000_u32 as _;
-const DEBUG_MESSAGE_LENGTH : *mut u32 = 0x8000_0004_u32 as _;
-const DEBUG_STATUS         : *mut u32 = 0x8000_0008_u32 as _;
-const DEBUG_WRITE_TRIGGER  : *mut u32 = 0x8000_000C_u32 as _;
-const DEBUG_FLUSH_TRIGGER  : *mut u32 = 0x8000_0010_u32 as _;
+const DEBUG_MESSAGE_PTR    : *mut *const u8  = 0x8000_0000_u32 as _;
+const DEBUG_MESSAGE_LENGTH : *mut        u32 = 0x8000_0004_u32 as _;
+const DEBUG_STATUS         : *mut        u32 = 0x8000_0008_u32 as _;
+const DEBUG_WRITE_TRIGGER  : *mut        u32 = 0x8000_000C_u32 as _;
+const DEBUG_FLUSH_TRIGGER  : *mut        u32 = 0x8000_0010_u32 as _;
 
 use core::fmt::Write;
 

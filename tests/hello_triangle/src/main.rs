@@ -62,7 +62,7 @@ const RASTERIZER_STATE: RasterizerState = RasterizerState::new(
     &[
         VaryingAssignment {
             t: VaryingType::F32x4,
-            i: Interpolation::Smooth,
+            i: Interpolation::Linear,
             slot: 0x10,
             _dummy: 0,
         }
@@ -145,7 +145,7 @@ extern "C" fn main() {
     println!("waiting for present completion...");
     present_completion.wait();
     println!("finished!");
-
+    
     loop {
         wfi();
     }

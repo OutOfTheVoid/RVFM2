@@ -7,7 +7,7 @@ use std::sync::Arc;
 use csrs::*;
 use decoder::*;
 
-use crate::machine::{Machine, ReadResult, WriteResult};
+use crate::machine::{AtomicLoadResult, AtomicOperationResult, Machine, ReadResult, WriteResult};
 
 #[derive(Copy, Clone, Debug)]
 pub enum InterruptCause {
@@ -108,6 +108,10 @@ enum BusErrorType {
     Fetch,
     Read(BusAccessSize),
     Write(BusAccessSize),
+    AtomicReadMisaligned,
+    AtomicReadInvalid,
+    AtomicWriteMisaligned,
+    AtomicWriteInvalid,
 }
 
 #[allow(unused)]
@@ -670,6 +674,174 @@ impl Hart {
                 self.csrs.mstatus.exit_interrupt();
                 self.csrs.mepc
             },
+            Rv32Op::Lr { acquire, release, rs1, rd } => {
+                let hart_id = self.csrs.hart_id();
+                let addr = self.gprs[rs1 as usize];
+                let value = match self.machine.load_reserve(addr, hart_id) {
+                    AtomicLoadResult::Ok(value) => value,
+                    AtomicLoadResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicReadInvalid),
+                    AtomicLoadResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicReadMisaligned),
+                };
+                self.set_gpr(rd, value);
+                instruction_addr.wrapping_add(4)
+            },
+            Rv32Op::Sc { acquire, release, rs2, rs1, rd } => {
+                let hart_id = self.csrs.hart_id();
+                let addr = self.gprs[rs1 as usize];
+                let value = self.gprs[rs2 as usize];
+                let success = match self.machine.store_conditional(addr, value, hart_id) {
+                    crate::machine::AtomicStoreConditionalResult::Ok => true,
+                    crate::machine::AtomicStoreConditionalResult::ReservationExpired => false,
+                    crate::machine::AtomicStoreConditionalResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicReadMisaligned),
+                    crate::machine::AtomicStoreConditionalResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicReadInvalid),
+                };
+                self.set_gpr(rd, if success { 1 } else { 0 });
+                instruction_addr.wrapping_add(4)
+            },
+            Rv32Op::AmoSwap { acquire, release, rs2, rs1, rd } => {
+                let addr = self.gprs[rs1 as usize];
+                let value_b = self.gprs[rs2 as usize];
+                match self.machine.atomic_operation(addr, value_b, |x, y| y) {
+                    AtomicOperationResult::Ok(result) => self.set_gpr(rd, result),
+                    AtomicOperationResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicWriteInvalid),
+                    AtomicOperationResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicWriteMisaligned),
+                }
+                match (acquire, release) {
+                    (true, false)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire),
+                    (false, true)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Release),
+                    (true, true)   => std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel),
+                    (false, false) => {},
+                }
+                instruction_addr.wrapping_add(4)
+            },
+            Rv32Op::AmoAdd { acquire, release, rs2, rs1, rd } => {
+                let addr = self.gprs[rs1 as usize];
+                let value_b = self.gprs[rs2 as usize];
+                match self.machine.atomic_operation(addr, value_b, |x, y| x.wrapping_add(y)) {
+                    AtomicOperationResult::Ok(result) => self.set_gpr(rd, result),
+                    AtomicOperationResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicWriteInvalid),
+                    AtomicOperationResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicWriteMisaligned),
+                }
+                match (acquire, release) {
+                    (true, false)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire),
+                    (false, true)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Release),
+                    (true, true)   => std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel),
+                    (false, false) => {},
+                }
+                instruction_addr.wrapping_add(4)
+            },
+            Rv32Op::AmoAnd { acquire, release, rs2, rs1, rd } => {
+                let addr = self.gprs[rs1 as usize];
+                let value_b = self.gprs[rs2 as usize];
+                match self.machine.atomic_operation(addr, value_b, |x, y| x & y) {
+                    AtomicOperationResult::Ok(result) => self.set_gpr(rd, result),
+                    AtomicOperationResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicWriteInvalid),
+                    AtomicOperationResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicWriteMisaligned),
+                }
+                match (acquire, release) {
+                    (true, false)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire),
+                    (false, true)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Release),
+                    (true, true)   => std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel),
+                    (false, false) => {},
+                }
+                instruction_addr.wrapping_add(4)
+            },
+            Rv32Op::AmoOr { acquire, release, rs2, rs1, rd } => {
+                let addr = self.gprs[rs1 as usize];
+                let value_b = self.gprs[rs2 as usize];
+                match self.machine.atomic_operation(addr, value_b, |x, y| x | y) {
+                    AtomicOperationResult::Ok(result) => self.set_gpr(rd, result),
+                    AtomicOperationResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicWriteInvalid),
+                    AtomicOperationResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicWriteMisaligned),
+                }
+                match (acquire, release) {
+                    (true, false)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire),
+                    (false, true)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Release),
+                    (true, true)   => std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel),
+                    (false, false) => {},
+                }
+                instruction_addr.wrapping_add(4)
+            },
+            Rv32Op::AmoXor { acquire, release, rs2, rs1, rd } => {
+                let addr = self.gprs[rs1 as usize];
+                let value_b = self.gprs[rs2 as usize];
+                match self.machine.atomic_operation(addr, value_b, |x, y| x ^ y) {
+                    AtomicOperationResult::Ok(result) => self.set_gpr(rd, result),
+                    AtomicOperationResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicWriteInvalid),
+                    AtomicOperationResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicWriteMisaligned),
+                }
+                match (acquire, release) {
+                    (true, false)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire),
+                    (false, true)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Release),
+                    (true, true)   => std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel),
+                    (false, false) => {},
+                }
+                instruction_addr.wrapping_add(4)
+            },
+            Rv32Op::AmoMax{ acquire, release, rs2, rs1, rd } => {
+                let addr = self.gprs[rs1 as usize];
+                let value_b = self.gprs[rs2 as usize];
+                match self.machine.atomic_operation(addr, value_b, |x, y| (x as i32).max(y as i32) as u32) {
+                    AtomicOperationResult::Ok(result) => self.set_gpr(rd, result),
+                    AtomicOperationResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicWriteInvalid),
+                    AtomicOperationResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicWriteMisaligned),
+                }
+                match (acquire, release) {
+                    (true, false)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire),
+                    (false, true)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Release),
+                    (true, true)   => std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel),
+                    (false, false) => {},
+                }
+                instruction_addr.wrapping_add(4)
+            },
+            Rv32Op::AmoMin{ acquire, release, rs2, rs1, rd } => {
+                let addr = self.gprs[rs1 as usize];
+                let value_b = self.gprs[rs2 as usize];
+                match self.machine.atomic_operation(addr, value_b, |x, y| (x as i32).max(y as i32) as u32) {
+                    AtomicOperationResult::Ok(result) => self.set_gpr(rd, result),
+                    AtomicOperationResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicWriteInvalid),
+                    AtomicOperationResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicWriteMisaligned),
+                }
+                match (acquire, release) {
+                    (true, false)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire),
+                    (false, true)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Release),
+                    (true, true)   => std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel),
+                    (false, false) => {},
+                }
+                instruction_addr.wrapping_add(4)
+            },
+            Rv32Op::AmoMaxU { acquire, release, rs2, rs1, rd } => {
+                let addr = self.gprs[rs1 as usize];
+                let value_b = self.gprs[rs2 as usize];
+                match self.machine.atomic_operation(addr, value_b, |x, y| x.max(y)) {
+                    AtomicOperationResult::Ok(result) => self.set_gpr(rd, result),
+                    AtomicOperationResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicWriteInvalid),
+                    AtomicOperationResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicWriteMisaligned),
+                }
+                match (acquire, release) {
+                    (true, false)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire),
+                    (false, true)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Release),
+                    (true, true)   => std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel),
+                    (false, false) => {},
+                }
+                instruction_addr.wrapping_add(4)
+            },
+            Rv32Op::AmoMinU { acquire, release, rs2, rs1, rd } => {
+                let addr = self.gprs[rs1 as usize];
+                let value_b = self.gprs[rs2 as usize];
+                match self.machine.atomic_operation(addr, value_b, |x, y| x.min(y)) {
+                    AtomicOperationResult::Ok(result) => self.set_gpr(rd, result),
+                    AtomicOperationResult::InvalidAddress => return self.bus_error(addr, BusErrorType::AtomicWriteInvalid),
+                    AtomicOperationResult::AlignmentError => return self.bus_error(addr, BusErrorType::AtomicWriteMisaligned),
+                }
+                match (acquire, release) {
+                    (true, false)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Acquire),
+                    (false, true)  => std::sync::atomic::fence(std::sync::atomic::Ordering::Release),
+                    (true, true)   => std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel),
+                    (false, false) => {},
+                }
+                instruction_addr.wrapping_add(4)
+            },
             _ => return self.unimplemend_instruction(instruction_addr, opcode_value, op),
         };
         self.pc = pc;
@@ -702,7 +874,16 @@ pc,
             BusErrorType::Fetch => println!("BUS ERROR (FETCH) AT {:#010X}", addr),
             BusErrorType::Read(size) => println!("BUS ERROR (READ {}) AT {:#010X}", size.to_str(), addr),
             BusErrorType::Write(size) => println!("BUS ERROR (WRITE {}) AT {:#010X}", size.to_str(), addr),
+            BusErrorType::AtomicReadInvalid |
+            BusErrorType::AtomicReadMisaligned => println!("BUS ERROR (ATOMIC READ) AT {:#010X}", addr),
+            BusErrorType::AtomicWriteInvalid |
+            BusErrorType::AtomicWriteMisaligned => println!("BUS ERROR (ATOMIC WRITE) AT {:#010X}", addr),
         }
+        StepState::BusError
+    }
+
+    fn atomic_error(&mut self) -> StepState {
+        todo!();
         StepState::BusError
     }
 
