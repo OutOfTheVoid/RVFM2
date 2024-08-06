@@ -379,8 +379,8 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
         InstructionType::Store => todo!(),
         InstructionType::Discard => todo!(),
         InstructionType::Conv => todo!(),
-        InstructionType::Neg => todo!(),
-        InstructionType::Sign => todo!(),
+        InstructionType::Neg(_)  => todo!(),
+        InstructionType::Sign(_) => todo!(),
         InstructionType::Recip => todo!(),
         InstructionType::Sin => todo!(),
         InstructionType::Cos => todo!(),
@@ -414,17 +414,24 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
             let (b, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             write_fcmp(bytes, instruction_token, dst, a, b, comparison, assembly_mode)?;
         },
-        InstructionType::Add => todo!(),
-        InstructionType::Sub => todo!(),
-        InstructionType::Mul => todo!(),
-        InstructionType::Div => todo!(),
-        InstructionType::Mod => todo!(),
+        InstructionType::Add(_) |
+        InstructionType::Sub(_) |
+        InstructionType::Mul(_) |
+        InstructionType::Div(_) |
+        InstructionType::Mod(_) => {
+            let (dst, _) = expect_write_register(iter, Some(aliases), assembly_mode)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (a, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (b, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            write_scalar_binary_op(bytes, &instruction_token, instruction_t, dst, a, b, assembly_mode)?;
+        },
         InstructionType::Atan2 => todo!(),
         InstructionType::And => todo!(),
         InstructionType::AndN => todo!(),
         InstructionType::Or => todo!(),
         InstructionType::Xor => todo!(),
-        InstructionType::Fma => todo!(),
+        InstructionType::Fma(_) => todo!(),
         InstructionType::Lerp => todo!(),
         InstructionType::Norm => todo!(),
         InstructionType::Mag => todo!(),

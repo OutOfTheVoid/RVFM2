@@ -31,6 +31,28 @@ const OPCODE_COMPARE_SCALAR_U32                   : u8 = 0x10;
 const OPCODE_COMPARE_VECTOR_U32                   : u8 = 0x11;
 const OPCODE_MATRIX_MULTIPLY_M44_V4               : u8 = 0x12;
 
+const OPCODE_SCALAR_ADD_F32                       : u8 = 0x13;
+const OPCODE_SCALAR_SUB_F32                       : u8 = 0x14;
+const OPCODE_SCALAR_MUL_F32                       : u8 = 0x15;
+const OPCODE_SCALAR_DIV_F32                       : u8 = 0x16;
+const OPCODE_SCALAR_MOD_F32                       : u8 = 0x17;
+const OPCODE_SCALAR_ADD_I32                       : u8 = 0x18;
+const OPCODE_SCALAR_SUB_I32                       : u8 = 0x19;
+const OPCODE_SCALAR_MUL_I32                       : u8 = 0x1A;
+const OPCODE_SCALAR_DIV_I32                       : u8 = 0x1B;
+const OPCODE_SCALAR_MOD_I32                       : u8 = 0x1C;
+
+const OPCODE_VECTOR_CW_ADD_F32                    : u8 = 0x1D;
+const OPCODE_VECTOR_CW_SUB_F32                    : u8 = 0x1E;
+const OPCODE_VECTOR_CW_MUL_F32                    : u8 = 0x1F;
+const OPCODE_VECTOR_CW_DIV_F32                    : u8 = 0x20;
+const OPCODE_VECTOR_CW_MOD_F32                    : u8 = 0x21;
+const OPCODE_VECTOR_CW_ADD_I32                    : u8 = 0x22;
+const OPCODE_VECTOR_CW_SUB_I32                    : u8 = 0x23;
+const OPCODE_VECTOR_CW_MUL_I32                    : u8 = 0x24;
+const OPCODE_VECTOR_CW_DIV_I32                    : u8 = 0x25;
+const OPCODE_VECTOR_CW_MOD_I32                    : u8 = 0x26;
+
 pub fn get_byte(i: &mut usize, code: &[u8]) -> Result<u8, ShaderParseError> {
     if *i >= code.len() {
         Err(ShaderParseError::UnexpectedEndOfCode)
@@ -237,6 +259,75 @@ pub fn parse_shader_bytecode(shader_type: ShaderType, code: &[u8], module: &mut 
                     dest
                 };
             },
+
+            OPCODE_SCALAR_ADD_F32 |  
+            OPCODE_SCALAR_SUB_F32 |  
+            OPCODE_SCALAR_MUL_F32 |  
+            OPCODE_SCALAR_DIV_F32 |  
+            OPCODE_SCALAR_MOD_F32 |  
+            OPCODE_SCALAR_ADD_I32 |  
+            OPCODE_SCALAR_SUB_I32 |  
+            OPCODE_SCALAR_MUL_I32 |  
+            OPCODE_SCALAR_DIV_I32 |  
+            OPCODE_SCALAR_MOD_I32 => {
+                let dst = get_register::<Scalar>(&mut i, code)?;
+                let src_a = get_register::<Scalar>(&mut i, code)?;
+                let src_b = get_register::<Scalar>(&mut i, code)?;
+                let op = match opcode {
+                    OPCODE_SCALAR_ADD_F32 => ScalarBinaryOp::Add     (OpDataType::F32),
+                    OPCODE_SCALAR_SUB_F32 => ScalarBinaryOp::Subtract(OpDataType::F32),
+                    OPCODE_SCALAR_MUL_F32 => ScalarBinaryOp::Multiply(OpDataType::F32),
+                    OPCODE_SCALAR_DIV_F32 => ScalarBinaryOp::Divide  (OpDataType::F32),
+                    OPCODE_SCALAR_MOD_F32 => ScalarBinaryOp::Modulo  (OpDataType::F32),
+                    OPCODE_SCALAR_ADD_I32 => ScalarBinaryOp::Add     (OpDataType::I32),
+                    OPCODE_SCALAR_SUB_I32 => ScalarBinaryOp::Subtract(OpDataType::I32),
+                    OPCODE_SCALAR_MUL_I32 => ScalarBinaryOp::Multiply(OpDataType::I32),
+                    OPCODE_SCALAR_DIV_I32 => ScalarBinaryOp::Divide  (OpDataType::I32),
+                    OPCODE_SCALAR_MOD_I32 => ScalarBinaryOp::Modulo  (OpDataType::I32),
+                    _ => unreachable!()
+                };
+                module.instruction_buffer[instruction] = ShaderInstruction::ScalarBinaryOp {
+                    src_a,
+                    src_b,
+                    dst,
+                    op
+                };
+            },
+
+            OPCODE_VECTOR_CW_ADD_F32 |  
+            OPCODE_VECTOR_CW_SUB_F32 |  
+            OPCODE_VECTOR_CW_MUL_F32 |  
+            OPCODE_VECTOR_CW_DIV_F32 |  
+            OPCODE_VECTOR_CW_MOD_F32 |  
+            OPCODE_VECTOR_CW_ADD_I32 |  
+            OPCODE_VECTOR_CW_SUB_I32 |  
+            OPCODE_VECTOR_CW_MUL_I32 |  
+            OPCODE_VECTOR_CW_DIV_I32 |  
+            OPCODE_VECTOR_CW_MOD_I32 => {
+                let dst = get_register::<Vector>(&mut i, code)?;
+                let src_a = get_register::<Vector>(&mut i, code)?;
+                let src_b = get_register::<Vector>(&mut i, code)?;
+                let op = match opcode {
+                    OPCODE_VECTOR_CW_ADD_F32 => ScalarBinaryOp::Add     (OpDataType::F32),
+                    OPCODE_VECTOR_CW_SUB_F32 => ScalarBinaryOp::Subtract(OpDataType::F32),
+                    OPCODE_VECTOR_CW_MUL_F32 => ScalarBinaryOp::Multiply(OpDataType::F32),
+                    OPCODE_VECTOR_CW_DIV_F32 => ScalarBinaryOp::Divide  (OpDataType::F32),
+                    OPCODE_VECTOR_CW_MOD_F32 => ScalarBinaryOp::Modulo  (OpDataType::F32),
+                    OPCODE_VECTOR_CW_ADD_I32 => ScalarBinaryOp::Add     (OpDataType::I32),
+                    OPCODE_VECTOR_CW_SUB_I32 => ScalarBinaryOp::Subtract(OpDataType::I32),
+                    OPCODE_VECTOR_CW_MUL_I32 => ScalarBinaryOp::Multiply(OpDataType::I32),
+                    OPCODE_VECTOR_CW_DIV_I32 => ScalarBinaryOp::Divide  (OpDataType::I32),
+                    OPCODE_VECTOR_CW_MOD_I32 => ScalarBinaryOp::Modulo  (OpDataType::I32),
+                    _ => unreachable!()
+                };
+                module.instruction_buffer[instruction] = ShaderInstruction::VectorComponentwiseScalarBinaryOp {
+                    src_a,
+                    src_b,
+                    dst,
+                    op
+                };
+            },
+
             _ => Err(ShaderParseError::UnknownOpcode)?
         }
         instruction += 1;

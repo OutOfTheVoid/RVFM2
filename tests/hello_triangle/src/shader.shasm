@@ -33,15 +33,15 @@ entry!
 
 fragment!
 
-alias! CONSTANTS : vconst_0
+alias! CONSTANTS           : vconst_0
 
-alias! input_color: vin_0
-alias! output_color: vout_0
+alias! input_color         : vin_0
+alias! output_color        : vout_0
 
-alias! red_value: sloc_0
-alias! red_above_threshold: sloc_0
-alias! threshold: sloc_1
-alias! zero: sloc_2
+alias! red_value           : sloc_0
+alias! red_above_threshold : sloc_0
+alias! threshold           : sloc_1
+alias! zero                : sloc_2
 
 entry!
     mov output_color, input_color

@@ -65,6 +65,29 @@ const INSTRUCTION_COMPARE_SCALAR_U32                   : u8 = 0x10;
 const INSTRUCTION_COMPARE_VECTOR_U32                   : u8 = 0x11;
 const INSTRUCTION_MATRIX_MULTIPLY_M44_V4               : u8 = 0x12;
 
+const INSTRUCTION_SCALAR_ADD_F32                       : u8 = 0x13;
+const INSTRUCTION_SCALAR_SUB_F32                       : u8 = 0x14;
+const INSTRUCTION_SCALAR_MUL_F32                       : u8 = 0x15;
+const INSTRUCTION_SCALAR_DIV_F32                       : u8 = 0x16;
+const INSTRUCTION_SCALAR_MOD_F32                       : u8 = 0x17;
+const INSTRUCTION_SCALAR_ADD_I32                       : u8 = 0x18;
+const INSTRUCTION_SCALAR_SUB_I32                       : u8 = 0x19;
+const INSTRUCTION_SCALAR_MUL_I32                       : u8 = 0x1A;
+const INSTRUCTION_SCALAR_DIV_I32                       : u8 = 0x1B;
+const INSTRUCTION_SCALAR_MOD_I32                       : u8 = 0x1C;
+
+
+const INSTRUCTION_VECTOR_CW_ADD_F32                    : u8 = 0x1D;
+const INSTRUCTION_VECTOR_CW_SUB_F32                    : u8 = 0x1E;
+const INSTRUCTION_VECTOR_CW_MUL_F32                    : u8 = 0x1F;
+const INSTRUCTION_VECTOR_CW_DIV_F32                    : u8 = 0x20;
+const INSTRUCTION_VECTOR_CW_MOD_F32                    : u8 = 0x21;
+const INSTRUCTION_VECTOR_CW_ADD_I32                    : u8 = 0x22;
+const INSTRUCTION_VECTOR_CW_SUB_I32                    : u8 = 0x23;
+const INSTRUCTION_VECTOR_CW_MUL_I32                    : u8 = 0x24;
+const INSTRUCTION_VECTOR_CW_DIV_I32                    : u8 = 0x25;
+const INSTRUCTION_VECTOR_CW_MOD_I32                    : u8 = 0x26;
+
 pub fn write_push(bytes: &mut Vec<u8>, src: RegisterName, src_token: &Token, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
     bytes.push(if src.is_vector() { INSTRUCTION_VECTOR_PUSH } else { INSTRUCTION_SCALAR_PUSH });
     src.write(bytes, assembly_mode);
@@ -110,6 +133,14 @@ impl WriteInstructionBytes for Component {
             Self::Z => 0x02,
             Self::W => 0x03,
         })
+    }
+}
+
+fn bool_to_type_name(x: bool) -> &'static str {
+    if x {
+        "vector"
+    } else {
+        "scalar"
     }
 }
 
@@ -355,5 +386,56 @@ pub fn write_mul_m44_v4(bytes: &mut Vec<u8>, mul_token: &Token, dst: RegisterNam
     a2.write(bytes, assembly_mode);
     a3.write(bytes, assembly_mode);
     x.write(bytes, assembly_mode);
+    Ok(())
+}
+
+pub fn write_scalar_binary_op(bytes: &mut Vec<u8>, op_token: &Token, op: InstructionType, dst: RegisterName, a: RegisterName, b: RegisterName, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
+    let vector = match (dst.is_vector(), a.is_vector(), b.is_vector()) {
+        (true, true, true) => true,
+        (false, false, false) => false,
+        _ => {
+            Err(SourceError {
+                message: format!(
+                    "Invalid operand types - dst: {}, a: {}, b: {}",
+                    bool_to_type_name(dst.is_vector()),
+                    bool_to_type_name(a.is_vector()),
+                    bool_to_type_name(b.is_vector())
+                ),
+                line: op_token.line,
+                column: op_token.column,
+            })?
+        }
+    };
+    let opcode = match (op, vector) {
+        (InstructionType::Add(OpDataType::F32), false ) => INSTRUCTION_SCALAR_ADD_F32,
+        (InstructionType::Add(OpDataType::I32), false ) => INSTRUCTION_SCALAR_ADD_I32,
+        (InstructionType::Add(OpDataType::F32), true  ) => INSTRUCTION_VECTOR_CW_ADD_F32,
+        (InstructionType::Add(OpDataType::I32), true  ) => INSTRUCTION_VECTOR_CW_ADD_I32,
+
+        (InstructionType::Sub(OpDataType::F32), false ) => INSTRUCTION_SCALAR_SUB_F32,
+        (InstructionType::Sub(OpDataType::I32), false ) => INSTRUCTION_SCALAR_SUB_I32,
+        (InstructionType::Sub(OpDataType::F32), true  ) => INSTRUCTION_VECTOR_CW_SUB_F32,
+        (InstructionType::Sub(OpDataType::I32), true  ) => INSTRUCTION_VECTOR_CW_SUB_I32,
+
+        (InstructionType::Mul(OpDataType::F32), false ) => INSTRUCTION_SCALAR_MUL_F32,
+        (InstructionType::Mul(OpDataType::I32), false ) => INSTRUCTION_SCALAR_MUL_I32,
+        (InstructionType::Mul(OpDataType::F32), true  ) => INSTRUCTION_VECTOR_CW_MUL_F32,
+        (InstructionType::Mul(OpDataType::I32), true  ) => INSTRUCTION_VECTOR_CW_MUL_I32,
+
+        (InstructionType::Div(OpDataType::F32), false ) => INSTRUCTION_SCALAR_DIV_F32,
+        (InstructionType::Div(OpDataType::I32), false ) => INSTRUCTION_SCALAR_DIV_I32,
+        (InstructionType::Div(OpDataType::F32), true  ) => INSTRUCTION_VECTOR_CW_DIV_F32,
+        (InstructionType::Div(OpDataType::I32), true  ) => INSTRUCTION_VECTOR_CW_DIV_I32,
+
+        (InstructionType::Mod(OpDataType::F32), false ) => INSTRUCTION_SCALAR_MOD_F32,
+        (InstructionType::Mod(OpDataType::I32), false ) => INSTRUCTION_SCALAR_MOD_I32,
+        (InstructionType::Mod(OpDataType::F32), true  ) => INSTRUCTION_VECTOR_CW_MOD_F32,
+        (InstructionType::Mod(OpDataType::I32), true  ) => INSTRUCTION_VECTOR_CW_MOD_I32,
+        _ => panic!("Invalid InstructionType passed to write_scalar_binary_op() (internal error)"),
+    };
+    bytes.push(opcode);
+    dst.write(bytes, assembly_mode);
+    a.write(bytes, assembly_mode);
+    b.write(bytes, assembly_mode);
     Ok(())
 }
