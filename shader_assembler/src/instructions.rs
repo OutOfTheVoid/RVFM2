@@ -2,7 +2,7 @@ use super::lexer::*;
 use super::src_error::*;
 
 trait WriteInstructionBytes {
-    fn write(&self, bytes: &mut Vec<u8>, entry_type: EntryType);
+    fn write(&self, bytes: &mut Vec<u8>, assembly_mode: AssemblyMode);
 }
 
 const REGTYPE_LOCAL    : u8 = 0x00;
@@ -11,8 +11,8 @@ const REGTYPE_OUTPUT   : u8 = 0x02;
 const REGTYPE_CONSTANT : u8 = 0x03;
 
 impl WriteInstructionBytes for RegisterName {
-    fn write(&self, bytes: &mut Vec<u8>, entry_type: EntryType) {
-        let (regnum, regtype) = match (entry_type, self) {
+    fn write(&self, bytes: &mut Vec<u8>, assembly_mode: AssemblyMode) {
+        let (regnum, regtype) = match (assembly_mode, self) {
             (_, RegisterName::LocalS(x)   ) => (*x, REGTYPE_LOCAL   ),
             (_, RegisterName::LocalV(x)   ) => (*x, REGTYPE_LOCAL   ),
             (_, RegisterName::ConstantS(x)) => (*x, REGTYPE_CONSTANT),
@@ -24,19 +24,19 @@ impl WriteInstructionBytes for RegisterName {
             (_, RegisterName::OutputS(x)  ) => (*x + 0x10, REGTYPE_OUTPUT  ),
             (_, RegisterName::OutputV(x)  ) => (*x + 0x10, REGTYPE_OUTPUT  ),
 
-            (EntryType::Vertex,   RegisterName::BuiltinS(ScalarBuiltin::VertexId       )) => (0x00, REGTYPE_INPUT ),
-            (EntryType::Vertex,   RegisterName::BuiltinS(ScalarBuiltin::ProvokingVertex)) => (0x01, REGTYPE_INPUT ),
+            (AssemblyMode::Vertex,   RegisterName::BuiltinS(ScalarBuiltin::VertexId       )) => (0x00, REGTYPE_INPUT ),
+            (AssemblyMode::Vertex,   RegisterName::BuiltinS(ScalarBuiltin::ProvokingVertex)) => (0x01, REGTYPE_INPUT ),
 
-            (EntryType::Vertex,   RegisterName::BuiltinS(ScalarBuiltin::Discard        )) => (0x00, REGTYPE_OUTPUT),
-            (EntryType::Vertex,   RegisterName::BuiltinV(VectorBuiltin::VertexPosition )) => (0x00, REGTYPE_OUTPUT),
+            (AssemblyMode::Vertex,   RegisterName::BuiltinS(ScalarBuiltin::Discard        )) => (0x00, REGTYPE_OUTPUT),
+            (AssemblyMode::Vertex,   RegisterName::BuiltinV(VectorBuiltin::VertexPosition )) => (0x00, REGTYPE_OUTPUT),
 
-            (EntryType::Fragment, RegisterName::BuiltinV(VectorBuiltin::VertexPosition )) => (0x00, REGTYPE_INPUT ),
-            (EntryType::Fragment, RegisterName::BuiltinV(VectorBuiltin::Barycentric    )) => (0x01, REGTYPE_INPUT ),
-            (EntryType::Fragment, RegisterName::BuiltinV(VectorBuiltin::Linear         )) => (0x02, REGTYPE_INPUT ),
-            (EntryType::Fragment, RegisterName::BuiltinV(VectorBuiltin::VertexIds      )) => (0x03, REGTYPE_INPUT ),
+            (AssemblyMode::Fragment, RegisterName::BuiltinV(VectorBuiltin::VertexPosition )) => (0x00, REGTYPE_INPUT ),
+            (AssemblyMode::Fragment, RegisterName::BuiltinV(VectorBuiltin::Barycentric    )) => (0x01, REGTYPE_INPUT ),
+            (AssemblyMode::Fragment, RegisterName::BuiltinV(VectorBuiltin::Linear         )) => (0x02, REGTYPE_INPUT ),
+            (AssemblyMode::Fragment, RegisterName::BuiltinV(VectorBuiltin::VertexIds      )) => (0x03, REGTYPE_INPUT ),
 
-            (EntryType::Fragment, RegisterName::BuiltinS(ScalarBuiltin::Discard        )) => (0x00, REGTYPE_OUTPUT),
-            (EntryType::Fragment, RegisterName::BuiltinS(ScalarBuiltin::Depth          )) => (0x01, REGTYPE_OUTPUT),
+            (AssemblyMode::Fragment, RegisterName::BuiltinS(ScalarBuiltin::Discard        )) => (0x00, REGTYPE_OUTPUT),
+            (AssemblyMode::Fragment, RegisterName::BuiltinS(ScalarBuiltin::Depth          )) => (0x01, REGTYPE_OUTPUT),
 
             _ => panic!("Attempt to write illegal register address"),
         };
@@ -65,15 +65,15 @@ const INSTRUCTION_COMPARE_SCALAR_U32                   : u8 = 0x10;
 const INSTRUCTION_COMPARE_VECTOR_U32                   : u8 = 0x11;
 const INSTRUCTION_MATRIX_MULTIPLY_M44_V4               : u8 = 0x12;
 
-pub fn write_push(bytes: &mut Vec<u8>, src: RegisterName, src_token: &Token, entry_type: EntryType) -> Result<(), SourceError> {
+pub fn write_push(bytes: &mut Vec<u8>, src: RegisterName, src_token: &Token, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
     bytes.push(if src.is_vector() { INSTRUCTION_VECTOR_PUSH } else { INSTRUCTION_SCALAR_PUSH });
-    src.write(bytes, entry_type);
+    src.write(bytes, assembly_mode);
     Ok(())
 }
 
-pub fn write_pop(bytes: &mut Vec<u8>, dst: RegisterName, dst_token: &Token, entry_type: EntryType) -> Result<(), SourceError> {
+pub fn write_pop(bytes: &mut Vec<u8>, dst: RegisterName, dst_token: &Token, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
     bytes.push(if dst.is_vector() { INSTRUCTION_VECTOR_POP } else { INSTRUCTION_SCALAR_POP });
-    dst.write(bytes, entry_type);
+    dst.write(bytes, assembly_mode);
     Ok(())
 }
 
@@ -103,7 +103,7 @@ impl Component {
 }
 
 impl WriteInstructionBytes for Component {
-    fn write(&self, bytes: &mut Vec<u8>, entry_type: EntryType) {
+    fn write(&self, bytes: &mut Vec<u8>, assembly_mode: AssemblyMode) {
         bytes.push(match self {
             Self::X => 0x00,
             Self::Y => 0x01,
@@ -113,34 +113,34 @@ impl WriteInstructionBytes for Component {
     }
 }
 
-pub fn write_mov(bytes: &mut Vec<u8>, mov_token: &Token, dst: RegisterName, dst_component: Option<&Token>, src: RegisterName, src_component: Option<&Token>, entry_type: EntryType) -> Result<(), SourceError> {
+pub fn write_mov(bytes: &mut Vec<u8>, mov_token: &Token, dst: RegisterName, dst_component: Option<&Token>, src: RegisterName, src_component: Option<&Token>, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
     Ok(match (dst.is_vector(), dst_component, src.is_vector(), src_component) {
         (true,  None,            true,  None           ) => {
             bytes.push(INSTRUCTION_VECTOR_COPY);
-            dst.write(bytes, entry_type);
-            src.write(bytes, entry_type);
+            dst.write(bytes, assembly_mode);
+            src.write(bytes, assembly_mode);
         },
 
         (false, None,            false, None           ) => {
             bytes.push(INSTRUCTION_SCALAR_COPY);
-            dst.write(bytes, entry_type);
-            src.write(bytes, entry_type);
+            dst.write(bytes, assembly_mode);
+            src.write(bytes, assembly_mode);
         },
 
         (false, None,            true,  Some(component)) => {
             let component = Component::from_token(component)?;
             bytes.push(INSTRUCTION_VECTOR_COMPONENT_TO_SCALAR_COPY);
-            dst.write(bytes, entry_type);
-            src.write(bytes, entry_type);
-            component.write(bytes, entry_type);
+            dst.write(bytes, assembly_mode);
+            src.write(bytes, assembly_mode);
+            component.write(bytes, assembly_mode);
         },
 
         (true,  Some(component), false, None           ) => {
             let component = Component::from_token(component)?;
             bytes.push(INSTRUCTION_SCALAR_TO_VECTOR_COMPONENT_COPY);
-            dst.write(bytes, entry_type);
-            component.write(bytes, entry_type);
-            src.write(bytes, entry_type);
+            dst.write(bytes, assembly_mode);
+            component.write(bytes, assembly_mode);
+            src.write(bytes, assembly_mode);
         },
 
         (false, None,            true,  None           ) |
@@ -173,40 +173,40 @@ pub fn write_mov(bytes: &mut Vec<u8>, mov_token: &Token, dst: RegisterName, dst_
 }
 
 
-pub fn write_cmov(bytes: &mut Vec<u8>, mov_token: &Token, cond: RegisterName, dst: RegisterName, dst_component: Option<&Token>, src: RegisterName, src_component: Option<&Token>, entry_type: EntryType) -> Result<(), SourceError> {
-    println!("write_cmov(cond: {:?}, dst: {:?}, dst_component: {:?}, src: {:?}, src_component: {:?}, entry_type: {:?}", cond, dst, dst_component, src, src_component, entry_type);
+pub fn write_cmov(bytes: &mut Vec<u8>, mov_token: &Token, cond: RegisterName, dst: RegisterName, dst_component: Option<&Token>, src: RegisterName, src_component: Option<&Token>, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
+    println!("write_cmov(cond: {:?}, dst: {:?}, dst_component: {:?}, src: {:?}, src_component: {:?}, assembly_mode: {:?}", cond, dst, dst_component, src, src_component, assembly_mode);
     Ok(match (dst.is_vector(), dst_component, src.is_vector(), src_component) {
         (true,  None,            true,  None           ) => {
             bytes.push(INSTRUCTION_COND_VECTOR_COPY);
-            cond.write(bytes, entry_type);
-            dst.write(bytes, entry_type);
-            src.write(bytes, entry_type);
+            cond.write(bytes, assembly_mode);
+            dst.write(bytes, assembly_mode);
+            src.write(bytes, assembly_mode);
         },
 
         (false, None,            false, None           ) => {
             bytes.push(INSTRUCTION_COND_SCALAR_COPY);
-            cond.write(bytes, entry_type);
-            dst.write(bytes, entry_type);
-            src.write(bytes, entry_type);
+            cond.write(bytes, assembly_mode);
+            dst.write(bytes, assembly_mode);
+            src.write(bytes, assembly_mode);
         },
 
         (false, None,            true,  Some(component)) => {
             let component = Component::from_token(component)?;
             bytes.push(INSTRUCTION_COND_VECTOR_COMPONENT_TO_SCALAR_COPY);
-            cond.write(bytes, entry_type);
-            dst.write(bytes, entry_type);
-            src.write(bytes, entry_type);
-            component.write(bytes, entry_type);
+            cond.write(bytes, assembly_mode);
+            dst.write(bytes, assembly_mode);
+            src.write(bytes, assembly_mode);
+            component.write(bytes, assembly_mode);
         },
 
         (true,  Some(component), false, None           ) => {
             println!("writing INSTRUCTION_COND_SCALAR_TO_VECTOR_COMPONENT_COPY");
             let component = Component::from_token(component)?;
             bytes.push(INSTRUCTION_COND_SCALAR_TO_VECTOR_COMPONENT_COPY);
-            cond.write(bytes, entry_type);
-            dst.write(bytes, entry_type);
-            component.write(bytes, entry_type);
-            src.write(bytes, entry_type);
+            cond.write(bytes, assembly_mode);
+            dst.write(bytes, assembly_mode);
+            component.write(bytes, assembly_mode);
+            src.write(bytes, assembly_mode);
         },
 
         (false, None,            true,  None           ) |
@@ -250,7 +250,7 @@ impl Comparison {
     }
 }
 
-pub fn write_fcmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: RegisterName, b: RegisterName, comparison: Comparison, entry_type: EntryType) -> Result<(), SourceError> {
+pub fn write_fcmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: RegisterName, b: RegisterName, comparison: Comparison, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
     let opcode = match (a.is_vector(), b.is_vector(), dst.is_vector()) {
         (true, true, true)    => INSTRUCTION_COMPARE_VECTOR_F32,
         (false, false, false) => INSTRUCTION_COMPARE_SCALAR_F32,
@@ -269,14 +269,14 @@ pub fn write_fcmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: 
         }
     };
     bytes.push(opcode);
-    dst.write(bytes, entry_type);
-    a.write(bytes, entry_type);
-    b.write(bytes, entry_type);
+    dst.write(bytes, assembly_mode);
+    a.write(bytes, assembly_mode);
+    b.write(bytes, assembly_mode);
     comparison.write(bytes);
     Ok(())
 }
 
-pub fn write_cmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: RegisterName, b: RegisterName, comparison: Comparison, entry_type: EntryType) -> Result<(), SourceError> {
+pub fn write_cmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: RegisterName, b: RegisterName, comparison: Comparison, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
     let opcode = match (a.is_vector(), b.is_vector(), dst.is_vector()) {
         (true, true, true)    => INSTRUCTION_COMPARE_VECTOR_I32,
         (false, false, false) => INSTRUCTION_COMPARE_SCALAR_I32,
@@ -295,14 +295,14 @@ pub fn write_cmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: R
         }
     };
     bytes.push(opcode);
-    dst.write(bytes, entry_type);
-    a.write(bytes, entry_type);
-    b.write(bytes, entry_type);
+    dst.write(bytes, assembly_mode);
+    a.write(bytes, assembly_mode);
+    b.write(bytes, assembly_mode);
     comparison.write(bytes);
     Ok(())
 }
 
-pub fn write_ucmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: RegisterName, b: RegisterName, comparison: Comparison, entry_type: EntryType) -> Result<(), SourceError> {
+pub fn write_ucmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: RegisterName, b: RegisterName, comparison: Comparison, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
     let opcode = match (a.is_vector(), b.is_vector(), dst.is_vector()) {
         (true, true, true)    => INSTRUCTION_COMPARE_VECTOR_U32,
         (false, false, false) => INSTRUCTION_COMPARE_SCALAR_U32,
@@ -321,14 +321,14 @@ pub fn write_ucmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: 
         }
     };
     bytes.push(opcode);
-    dst.write(bytes, entry_type);
-    a.write(bytes, entry_type);
-    b.write(bytes, entry_type);
+    dst.write(bytes, assembly_mode);
+    a.write(bytes, assembly_mode);
+    b.write(bytes, assembly_mode);
     comparison.write(bytes);
     Ok(())
 }
 
-pub fn write_mul_m44_v4(bytes: &mut Vec<u8>, mul_token: &Token, dst: RegisterName, a0: RegisterName, a1: RegisterName, a2: RegisterName, a3: RegisterName, x: RegisterName, entry_type: EntryType) -> Result<(), SourceError> {
+pub fn write_mul_m44_v4(bytes: &mut Vec<u8>, mul_token: &Token, dst: RegisterName, a0: RegisterName, a1: RegisterName, a2: RegisterName, a3: RegisterName, x: RegisterName, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
     match dst.is_vector() && a0.is_vector() && a1.is_vector() && a2.is_vector() && a3.is_vector() && x.is_vector() {
         true => {},
         false =>{
@@ -349,11 +349,11 @@ pub fn write_mul_m44_v4(bytes: &mut Vec<u8>, mul_token: &Token, dst: RegisterNam
         }
     }
     bytes.push(INSTRUCTION_MATRIX_MULTIPLY_M44_V4);
-    dst.write(bytes, entry_type);
-    a0.write(bytes, entry_type);
-    a1.write(bytes, entry_type);
-    a2.write(bytes, entry_type);
-    a3.write(bytes, entry_type);
-    x.write(bytes, entry_type);
+    dst.write(bytes, assembly_mode);
+    a0.write(bytes, assembly_mode);
+    a1.write(bytes, assembly_mode);
+    a2.write(bytes, assembly_mode);
+    a3.write(bytes, assembly_mode);
+    x.write(bytes, assembly_mode);
     Ok(())
 }

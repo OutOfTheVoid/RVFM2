@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::iter::Peekable;
 
 use super::lexer::*;
@@ -74,37 +76,49 @@ fn try_expect_token_with<'t, I: Iterator<Item = &'t Token>>(description: &str, t
     }
 }
 
-fn expect_write_register<'t, I: Iterator<Item = &'t Token>>(iter: &mut Peekable<I>, entry_type: EntryType) -> Result<(RegisterName, &'t Token), SourceError> {
-    let token = expect_token_with(&format!("register writable from shader with {:?}", entry_type),
+fn expect_write_register<'t, I: Iterator<Item = &'t Token>>(iter: &mut Peekable<I>, aliases: Option<&HashMap<(AssemblyMode, String), RegisterName>>, assembly_mode: AssemblyMode) -> Result<(RegisterName, &'t Token), SourceError> {
+    let token = expect_token_with(&format!("register writable from shader with {:?}", assembly_mode),
         |t| match t {
                 TokenType::Register(RegisterName::LocalS(_)) |
                 TokenType::Register(RegisterName::LocalV(_)) |
                 TokenType::Register(RegisterName::OutputS(_)) |
                 TokenType::Register(RegisterName::OutputV(_)) => true,
                 TokenType::Register(RegisterName::BuiltinS(scalar_builtin)) => {
-                    match (entry_type, scalar_builtin) {
-                        (EntryType::Fragment, ScalarBuiltin::Depth) => true,
+                    match (assembly_mode, scalar_builtin) {
+                        (AssemblyMode::Fragment, ScalarBuiltin::Depth) => true,
                         _ => false,
                     }
                 },
                 TokenType::Register(RegisterName::BuiltinV(vector_builtin)) => {
-                    match (entry_type, vector_builtin) {
-                        (EntryType::Vertex, VectorBuiltin::VertexPosition) => true,
+                    match (assembly_mode, vector_builtin) {
+                        (AssemblyMode::Vertex, VectorBuiltin::VertexPosition) => true,
                         _ => false,
                     }
                 },
+                TokenType::Name => aliases.is_some(),
                 _ => false,
             },
         iter)?;
     if let Token { t: TokenType::Register(name), .. } = token {
         Ok((*name, token))
+    } else if let Token { t: TokenType::Name, value: Some(variable_name), line, column } = token {
+        let variables = aliases.unwrap();
+        if let Some(register) = variables.get(&(assembly_mode, variable_name.clone())) {
+            Ok((*register, token))
+        } else {
+            Err(SourceError {
+                message: format!("No variable with the name {}", variable_name),
+                line: *line,
+                column: *column
+            })
+        }
     } else {
         unreachable!()
     }
 }
 
-fn expect_read_register<'t, I: Iterator<Item = &'t Token>>(iter: &mut Peekable<I>, entry_type: EntryType) -> Result<(RegisterName, &'t Token), SourceError> {
-    let token = expect_token_with(&format!("register readable from {:?} shader", entry_type),
+fn expect_read_register<'t, I: Iterator<Item = &'t Token>>(iter: &mut Peekable<I>, aliases: Option<&HashMap<(AssemblyMode, String), RegisterName>>, assembly_mode: AssemblyMode) -> Result<(RegisterName, &'t Token), SourceError> {
+    let token = expect_token_with(&format!("register readable from {:?} shader", assembly_mode),
         |t| match t {
                 TokenType::Register(RegisterName::ConstantS(_)) |
                 TokenType::Register(RegisterName::ConstantV(_)) |
@@ -113,27 +127,47 @@ fn expect_read_register<'t, I: Iterator<Item = &'t Token>>(iter: &mut Peekable<I
                 TokenType::Register(RegisterName::InputS(_)) |
                 TokenType::Register(RegisterName::InputV(_)) => true,
                 TokenType::Register(RegisterName::BuiltinS(scalar_builtin)) => {
-                    match (entry_type, scalar_builtin) {
-                        (EntryType::Vertex, ScalarBuiltin::VertexId)        |
-                        (EntryType::Vertex, ScalarBuiltin::ProvokingVertex) |
-                        (EntryType::Fragment, ScalarBuiltin::Depth)         => true,
+                    match (assembly_mode, scalar_builtin) {
+                        (AssemblyMode::Vertex, ScalarBuiltin::VertexId)        |
+                        (AssemblyMode::Vertex, ScalarBuiltin::ProvokingVertex) |
+                        (AssemblyMode::Fragment, ScalarBuiltin::Depth)         => true,
                         _ => false,
                     }
                 },
                 TokenType::Register(RegisterName::BuiltinV(vector_builtin)) => {
-                    match (entry_type, vector_builtin) {
-                        (EntryType::Fragment, VectorBuiltin::VertexPosition) |
-                        (EntryType::Fragment, VectorBuiltin::Barycentric   ) |
-                        (EntryType::Fragment, VectorBuiltin::Linear         ) |
-                        (EntryType::Fragment, VectorBuiltin::VertexIds     ) => true,
+                    match (assembly_mode, vector_builtin) {
+                        (AssemblyMode::Fragment, VectorBuiltin::VertexPosition) |
+                        (AssemblyMode::Fragment, VectorBuiltin::Barycentric   ) |
+                        (AssemblyMode::Fragment, VectorBuiltin::Linear         ) |
+                        (AssemblyMode::Fragment, VectorBuiltin::VertexIds     ) => true,
                         _ => false
                     }
-                }
+                },
+                TokenType::Name => aliases.is_some(),
                 _ => false,
             },
         iter)?;
     if let Token { t: TokenType::Register(name), .. } = token {
         Ok((*name, token))
+    } else if let Token { t: TokenType::Name, value: Some(name), line, column } = token {
+        
+        if let Some(aliases) = aliases {
+            if let Some(register) = aliases.get(&(assembly_mode, name.clone())) {
+                Ok((*register, token))
+            } else {
+                Err(SourceError {
+                    message: format!("No variable or constant with the name {}", name),
+                    line: *line,
+                    column: *column
+                })
+            }
+        } else {
+            Err(SourceError {
+                message: format!("\"{}\" is not a valid register name", name),
+                line: *line,
+                column: *column,
+            })
+        }
     } else {
         unreachable!()
     }
@@ -141,29 +175,66 @@ fn expect_read_register<'t, I: Iterator<Item = &'t Token>>(iter: &mut Peekable<I
 
 
 
-pub fn run_assembler(tokens: &[Token], entry_type: EntryType) -> Result<Box<[u8]>, Vec<SourceError>> {
+pub fn run_assembler(tokens: &[Token], entry_mode: AssemblyMode) -> Result<Box<[u8]>, Vec<SourceError>> {
     let mut bytes = Vec::new();
     let mut token_iter = tokens.iter().filter(|x| x.t != TokenType::Comment && x.t != TokenType::Whitespace).peekable();
     let mut errors = Vec::new();
-    while let Some(token) = token_iter.next() {
-        if token.t == TokenType::Command(CommandType::Entry(entry_type)) {
-            break;
-        }
-    }
+    let mut aliases: HashMap<(AssemblyMode, String), RegisterName> = HashMap::new();
+    let mut entry_found = false;
+    let mut assembly_mode = None;
+
     while let Some(token) = token_iter.next() {
         match token.t {
             TokenType::Whitespace |
             TokenType::Comment => {},
             TokenType::Command(command_t) => {
+                println!("assembling command: {:?}", command_t);
                 match command_t {
-                    CommandType::Entry(_) => {
-                        break;
+                    CommandType::Entry => {
+                        let current_assembly_mode = match assembly_mode {
+                            Some(mode) => mode,
+                            None => {
+                                errors.push(SourceError {
+                                    message: format!("entry! used before an assembler mode was set (vertex!, fragment!, or compute!)"),
+                                    line: token.line,
+                                    column: token.column,
+                                });
+                                break;
+                            }
+                        };
+                        if !entry_found {
+                            if entry_mode == current_assembly_mode {
+                                entry_found = true;
+                                bytes.clear();
+                            }
+                        } else {
+                            break;
+                        }
+                    },
+                    CommandType::Alias => {
+                        let assembly_mode = match assembly_mode {
+                            Some(mode) => mode,
+                            None => {
+                                errors.push(SourceError {
+                                    message: format!("alias! used before an assembler mode was set (vertex!, fragment!, or compute!)"),
+                                    line: token.line,
+                                    column: token.column,
+                                });
+                                break;
+                            }
+                        };
+                        if let Err(error) = handle_alias(&mut bytes, &mut aliases, &token, &mut token_iter, assembly_mode) {
+                            errors.push(error);
+                        }
+                    },
+                    CommandType::SetMode(new_asembly_mode) => {
+                        assembly_mode = Some(new_asembly_mode);
                     }
                     _ => todo!()
                 }
             },
             TokenType::Instruction(instruction_t) => {
-                if let Err(error) = handle_instruction(&mut bytes, instruction_t, token,&mut token_iter, entry_type) {
+                if let Err(error) = handle_instruction(&mut bytes, instruction_t, token, &mut token_iter, &aliases, assembly_mode) {
                     errors.push(error);
                 }
             },
@@ -202,7 +273,21 @@ pub fn run_assembler(tokens: &[Token], entry_type: EntryType) -> Result<Box<[u8]
                     column: token.column,
                 })
             },
+            TokenType::Colon => {
+                errors.push(SourceError {
+                    message: format!("Unexpected colon"),
+                    line: token.line,
+                    column: token.column,
+                })
+            },
         }
+    }
+    if !entry_found {
+        errors.push(SourceError {
+            message: format!("No matching shader entry point in file"),
+            line: 0,
+            column: 0,
+        })
     }
     if errors.len() != 0 {
         return Err(errors)
@@ -211,49 +296,78 @@ pub fn run_assembler(tokens: &[Token], entry_type: EntryType) -> Result<Box<[u8]
     }
 }
 
-fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, instruction_t: InstructionType, instruction_token: &'t Token, iter: &mut Peekable<I>, entry_type: EntryType) -> Result<(), SourceError> {
+fn handle_alias<'t, I: Iterator<Item = &'t Token>>(_bytes: &mut Vec<u8>, aliases: &mut HashMap<(AssemblyMode, String), RegisterName>, alias_token: &'t Token, iter: &mut Peekable<I>, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
+    let name_token = expect_token(TokenType::Name, iter)?;
+    let alias_name = name_token.value.clone().expect("expected Name token to have a value");
+    expect_token(TokenType::Colon, iter)?;
+    let register_token = iter.next().ok_or_else(|| SourceError {
+        message: format!("Unexpected end of file"),
+        line: alias_token.line,
+        column: alias_token.column
+    })?;
+    let register_name = match register_token.t {
+        TokenType::Register(register_name) => register_name,
+        _ => Err(SourceError {
+            message: format!("Expected register name after colon in alias declaration"),
+            line: register_token.line,
+            column: register_token.column,
+        })?
+    };
+    println!("new aliases: \"{}\": {:?}", alias_name, register_name);
+    aliases.insert((assembly_mode, alias_name), register_name);
+    Ok(())
+}
+
+fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, instruction_t: InstructionType, instruction_token: &'t Token, iter: &mut Peekable<I>, aliases: &HashMap<(AssemblyMode, String), RegisterName>, assembly_mode: Option<AssemblyMode>) -> Result<(), SourceError> {
+    let assembly_mode = assembly_mode.ok_or_else(|| 
+        SourceError {
+            message: format!("instruction before assembly mode command (vertex, fragment, compute)"),
+            line: instruction_token.line,
+            column: instruction_token.column
+        }
+    )?;
     match instruction_t {
         InstructionType::Push => {
-            let (src, src_token) = expect_read_register(iter, entry_type)?;
-            write_push(bytes, src, src_token, entry_type)?;
+            let (src, src_token) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            write_push(bytes, src, src_token, assembly_mode)?;
         },
         InstructionType::Pop => {
-            let (dst, dst_token) = expect_write_register(iter, entry_type)?;
-            write_pop(bytes, dst, dst_token, entry_type)?;
+            let (dst, dst_token) = expect_write_register(iter, Some(aliases), assembly_mode)?;
+            write_pop(bytes, dst, dst_token, assembly_mode)?;
         },
         InstructionType::Mov => {
-            let dst = expect_write_register(iter, entry_type)?;
+            let dst = expect_write_register(iter, Some(aliases), assembly_mode)?;
             let dst_component = if let Some(_dot_token) = try_expect_token(TokenType::Dot, iter) {
                 Some(expect_token(TokenType::Name, iter)?)
             } else {
                 None
             };
             expect_token(TokenType::Comma, iter)?;
-            let src = expect_read_register(iter, entry_type)?;
+            let src = expect_read_register(iter, Some(aliases), assembly_mode)?;
             let src_component = if let Some(_dot_token) = try_expect_token(TokenType::Dot, iter) {
                 Some(expect_token(TokenType::Name, iter)?)
             } else {
                 None
             };
-            write_mov(bytes, instruction_token, dst.0, dst_component, src.0, src_component, entry_type)?;
+            write_mov(bytes, instruction_token, dst.0, dst_component, src.0, src_component, assembly_mode)?;
         },
         InstructionType::CMov => {
-            let cond = expect_read_register(iter, entry_type)?;
+            let cond = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let dst = expect_write_register(iter, entry_type)?;
+            let dst = expect_write_register(iter, Some(aliases), assembly_mode)?;
             let dst_component = if let Some(_dot_token) = try_expect_token(TokenType::Dot, iter) {
                 Some(expect_token(TokenType::Name, iter)?)
             } else {
                 None
             };
             expect_token(TokenType::Comma, iter)?;
-            let src = expect_read_register(iter, entry_type)?;
+            let src = expect_read_register(iter, Some(aliases), assembly_mode)?;
             let src_component = if let Some(_dot_token) = try_expect_token(TokenType::Dot, iter) {
                 Some(expect_token(TokenType::Name, iter)?)
             } else {
                 None
             };
-            write_cmov(bytes, instruction_token, cond.0, dst.0, dst_component, src.0, src_component, entry_type)?;
+            write_cmov(bytes, instruction_token, cond.0, dst.0, dst_component, src.0, src_component, assembly_mode)?;
         },
         InstructionType::Read => {
             todo!()
@@ -277,28 +391,28 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
         InstructionType::Ln => todo!(),
         InstructionType::Exp => todo!(),
         InstructionType::Cmp(comparison) => {
-            let (dst, _) = expect_read_register(iter, entry_type)?;
+            let (dst, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (a, _) = expect_read_register(iter, entry_type)?;
+            let (a, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (b, _) = expect_read_register(iter, entry_type)?;
-            write_cmp(bytes, instruction_token, dst, a, b, comparison, entry_type)?;
+            let (b, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            write_cmp(bytes, instruction_token, dst, a, b, comparison, assembly_mode)?;
         },
         InstructionType::UCmp(comparison) => {
-            let (dst, _) = expect_read_register(iter, entry_type)?;
+            let (dst, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (a, _) = expect_read_register(iter, entry_type)?;
+            let (a, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (b, _) = expect_read_register(iter, entry_type)?;
-            write_ucmp(bytes, instruction_token, dst, a, b, comparison, entry_type)?;
+            let (b, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            write_ucmp(bytes, instruction_token, dst, a, b, comparison, assembly_mode)?;
         },
         InstructionType::FCmp(comparison) => {
-            let (dst, _) = expect_read_register(iter, entry_type)?;
+            let (dst, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (a, _) = expect_read_register(iter, entry_type)?;
+            let (a, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (b, _) = expect_read_register(iter, entry_type)?;
-            write_fcmp(bytes, instruction_token, dst, a, b, comparison, entry_type)?;
+            let (b, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            write_fcmp(bytes, instruction_token, dst, a, b, comparison, assembly_mode)?;
         },
         InstructionType::Add => todo!(),
         InstructionType::Sub => todo!(),
@@ -316,18 +430,18 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
         InstructionType::Mag => todo!(),
         InstructionType::Cross => todo!(),
         InstructionType::MatrixMultiply4x4V4 => {
-            let (dst, _) = expect_write_register(iter, entry_type)?;
+            let (dst, _) = expect_write_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (a0, _) = expect_read_register(iter, entry_type)?;
+            let (a0, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (a1, _) = expect_read_register(iter, entry_type)?;
+            let (a1, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (a2, _) = expect_read_register(iter, entry_type)?;
+            let (a2, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (a3, _) = expect_read_register(iter, entry_type)?;
+            let (a3, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
-            let (x, _) = expect_read_register(iter, entry_type)?;
-            write_mul_m44_v4(bytes, &instruction_token, dst, a0, a1, a2, a3, x, entry_type)?;
+            let (x, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            write_mul_m44_v4(bytes, &instruction_token, dst, a0, a1, a2, a3, x, assembly_mode)?;
         }
     }
     Ok(())

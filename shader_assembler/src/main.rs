@@ -16,9 +16,9 @@ fn main() {
     let output_binary_file = args.next().expect(PROGRAM_USAGE);
 
     let entry_type = match mode_switch.as_str() {
-        "-v" => EntryType::Vertex,
-        "-f" => EntryType::Fragment,
-        "-c" => EntryType::Compute,
+        "-v" => AssemblyMode::Vertex,
+        "-f" => AssemblyMode::Fragment,
+        "-c" => AssemblyMode::Compute,
         _ => panic!("Unknown flag: {}", mode_switch),
     };
 
@@ -44,32 +44,7 @@ fn main() {
         }
     };
     
-    let mut start_token = None;
-    let mut end_token = None;
-    for i in 0..tokens.len() {
-        match tokens[i].t {
-            TokenType::Command(CommandType::Entry(command_entry_type)) => {
-                if start_token.is_none() {
-                    if command_entry_type == entry_type {
-                        start_token = Some(i);
-                    }
-                } else {
-                    end_token = Some(i);
-                }
-            },
-            _ => {}
-        }
-    }
-    let start = match start_token {
-        Some(i) => i,
-        None => panic!("No entry point found for {:?}", entry_type),
-    };
-    let end = end_token.unwrap_or(tokens.len());
-
-    println!("");
-    println!("");
-    
-    let assembler_result = run_assembler(&tokens[start..end], entry_type);
+    let assembler_result = run_assembler(&tokens[..], entry_type);
     match assembler_result {
         Ok(bytes) => {
             println!("ASSEMBLY FINISHED - bytecode: ");

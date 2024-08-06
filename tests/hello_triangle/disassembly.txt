@@ -7029,7 +7029,7 @@ f8006af4:	0110                	.2byte	0x110
 f8006af6:	0610                	.2byte	0x610
 f8006af8:	0000                	.2byte	0x0
 f8006afa:	1001                	.2byte	0x1001
-f8006afc:	0602                	.2byte	0x602
+f8006afc:	0600                	.2byte	0x600
 f8006afe:	0100                	.2byte	0x100
 f8006b00:	06020003          	lb	zero,96(tp) # 60 <.Lline_table_start1>
 f8006b04:	0200                	.2byte	0x200
@@ -7040,7 +7040,7 @@ f8006b0e:	0000                	.2byte	0x0
 f8006b10:	0b02                	.2byte	0xb02
 f8006b12:	0000                	.2byte	0x0
 f8006b14:	1002                	.2byte	0x1002
-f8006b16:	0002                	.2byte	0x2
+f8006b16:	0000                	.2byte	0x0
 f8006b18:	0002                	.2byte	0x2
 	...
 

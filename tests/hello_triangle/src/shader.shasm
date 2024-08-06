@@ -1,13 +1,56 @@
-entry_v
-    mul_m44_v4 vertex_position, vconst_1, vconst_2, vconst_3, vconst_4, vin_0
-    mov  vout_0, vin_1
-    mov  sloc_0, vconst_0.w
-    mov  vout_0.w, sloc_0
+vertex!
 
-entry_f
-    mov vout_0, vin_0
-    mov sloc_0, vin_0.z
-    mov sloc_1, vconst_0.z
-    mov sloc_2, vconst_0.x
-    fcmp_lt sloc_0, sloc_1, sloc_0
-    cmov sloc_0, vout_0.z, sloc_2
+alias! input_position : vin_0
+alias! input_color    : vin_1
+
+alias! txfm_col_0 : vconst_1
+alias! txfm_col_1 : vconst_2
+alias! txfm_col_2 : vconst_3
+alias! txfm_col_3 : vconst_4
+
+alias! CONSTANTS : vconst_0
+
+alias! output_position : vertex_position
+alias! output_color    : vout_0 
+
+alias! temp: sloc_0
+
+entry!
+
+    mul_m44_v4
+        output_position,
+        txfm_col_0, txfm_col_1, txfm_col_2, txfm_col_3,
+        input_position
+
+    mov  output_color, input_color
+    
+    mov  temp, CONSTANTS.w
+    mov  vout_0.w, temp
+
+
+
+// ========================================================== //
+
+fragment!
+
+alias! CONSTANTS : vconst_0
+
+alias! input_color: vin_0
+alias! output_color: vout_0
+
+alias! red_value: sloc_0
+alias! red_above_threshold: sloc_0
+alias! threshold: sloc_1
+alias! zero: sloc_2
+
+entry!
+    mov output_color, input_color
+    mov red_value, input_color.r
+
+    mov threshold, CONSTANTS.z
+
+    mov zero, CONSTANTS.x
+    fcmp_lt red_above_threshold, threshold, red_value
+
+
+    cmov red_above_threshold, output_color.r, zero

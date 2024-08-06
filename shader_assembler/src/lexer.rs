@@ -1,7 +1,7 @@
 use super::src_error::*;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum EntryType {
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+pub enum AssemblyMode {
     Vertex,
     Fragment,
     Compute,
@@ -9,8 +9,9 @@ pub enum EntryType {
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum CommandType {
-    Entry(EntryType),
-    Var,
+    SetMode(AssemblyMode),
+    Entry,
+    Alias,
     TextureDecl,
     BufferDecl,
 }
@@ -133,6 +134,7 @@ pub enum TokenType {
     Comment,
     Comma,
     Dot,
+    Colon,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -200,6 +202,15 @@ pub fn run_lexer(input: &str) -> Result<Vec<Token>, Vec<SourceError>>  {
                 });
             },
 
+            ':' => {
+                tokens.push(Token {
+                    t: TokenType::Colon,
+                    line: token_line,
+                    column: token_column,
+                    value: None,
+                });
+            }
+
             'a' ..= 'z' | 'A' ..= 'Z' | '_' => {
                 value_string.push(c);
                 while let Some(&c) = chars.peek() {
@@ -210,6 +221,13 @@ pub fn run_lexer(input: &str) -> Result<Vec<Token>, Vec<SourceError>>  {
                             column += 1;
                         },
                         _ => break,
+                    }
+                }
+                if let Some(&c) = chars.peek() {
+                    if c == '!' {
+                        value_string.push(c);
+                        chars.next();
+                        column += 1;
                     }
                 }
                 let t = if value_string.to_lowercase().starts_with("vloc_") {
@@ -309,12 +327,15 @@ pub fn run_lexer(input: &str) -> Result<Vec<Token>, Vec<SourceError>>  {
                         "depth"            => TokenType::Register(RegisterName::BuiltinS(ScalarBuiltin::Depth)),
                         "vertex_id"        => TokenType::Register(RegisterName::BuiltinS(ScalarBuiltin::VertexId)),
                         "provoking_vertex" => TokenType::Register(RegisterName::BuiltinS(ScalarBuiltin::ProvokingVertex)),
-                        "entry_v"          => TokenType::Command(CommandType::Entry(EntryType::Vertex)),
-                        "entry_f"          => TokenType::Command(CommandType::Entry(EntryType::Fragment)),
-                        "entry_c"          => TokenType::Command(CommandType::Entry(EntryType::Compute)),
-                        "var"              => TokenType::Command(CommandType::Var),
-                        "texture"          => TokenType::Command(CommandType::TextureDecl),
-                        "buffer"           => TokenType::Command(CommandType::BufferDecl),
+
+                        "vertex!"          => TokenType::Command(CommandType::SetMode(AssemblyMode::Vertex)),
+                        "fragment!"        => TokenType::Command(CommandType::SetMode(AssemblyMode::Fragment)),
+                        "compute!"         => TokenType::Command(CommandType::SetMode(AssemblyMode::Compute)),
+                        "entry!"           => TokenType::Command(CommandType::Entry),
+                        "alias!"           => TokenType::Command(CommandType::Alias),
+                        "texture!"         => TokenType::Command(CommandType::TextureDecl),
+                        "buffer!"          => TokenType::Command(CommandType::BufferDecl),
+
                         "push"             => TokenType::Instruction(InstructionType::Push),
                         "pop"              => TokenType::Instruction(InstructionType::Pop),
                         "mov"              => TokenType::Instruction(InstructionType::Mov),
