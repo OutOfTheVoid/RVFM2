@@ -32,6 +32,8 @@ impl WriteInstructionBytes for RegisterName {
 
             (EntryType::Fragment, RegisterName::BuiltinV(VectorBuiltin::VertexPosition )) => (0x00, REGTYPE_INPUT ),
             (EntryType::Fragment, RegisterName::BuiltinV(VectorBuiltin::Barycentric    )) => (0x01, REGTYPE_INPUT ),
+            (EntryType::Fragment, RegisterName::BuiltinV(VectorBuiltin::Linear         )) => (0x02, REGTYPE_INPUT ),
+            (EntryType::Fragment, RegisterName::BuiltinV(VectorBuiltin::VertexIds      )) => (0x03, REGTYPE_INPUT ),
 
             (EntryType::Fragment, RegisterName::BuiltinS(ScalarBuiltin::Discard        )) => (0x00, REGTYPE_OUTPUT),
             (EntryType::Fragment, RegisterName::BuiltinS(ScalarBuiltin::Depth          )) => (0x01, REGTYPE_OUTPUT),
@@ -51,10 +53,17 @@ const INSTRUCTION_VECTOR_COPY                          : u8 = 0x04;
 const INSTRUCTION_SCALAR_COPY                          : u8 = 0x05;
 const INSTRUCTION_VECTOR_COMPONENT_TO_SCALAR_COPY      : u8 = 0x06;
 const INSTRUCTION_SCALAR_TO_VECTOR_COMPONENT_COPY      : u8 = 0x07;
-const INSTRUCTION_COND_VECTOR_COPY                     : u8 = 0x04;
-const INSTRUCTION_COND_SCALAR_COPY                     : u8 = 0x05;
-const INSTRUCTION_COND_VECTOR_COMPONENT_TO_SCALAR_COPY : u8 = 0x06;
-const INSTRUCTION_COND_SCALAR_TO_VECTOR_COMPONENT_COPY : u8 = 0x07;
+const INSTRUCTION_COND_VECTOR_COPY                     : u8 = 0x08;
+const INSTRUCTION_COND_SCALAR_COPY                     : u8 = 0x09;
+const INSTRUCTION_COND_VECTOR_COMPONENT_TO_SCALAR_COPY : u8 = 0x0A;
+const INSTRUCTION_COND_SCALAR_TO_VECTOR_COMPONENT_COPY : u8 = 0x0B;
+const INSTRUCTION_COMPARE_SCALAR_F32                   : u8 = 0x0C;
+const INSTRUCTION_COMPARE_VECTOR_F32                   : u8 = 0x0D;
+const INSTRUCTION_COMPARE_SCALAR_I32                   : u8 = 0x0E;
+const INSTRUCTION_COMPARE_VECTOR_I32                   : u8 = 0x0F;
+const INSTRUCTION_COMPARE_SCALAR_U32                   : u8 = 0x10;
+const INSTRUCTION_COMPARE_VECTOR_U32                   : u8 = 0x11;
+const INSTRUCTION_MATRIX_MULTIPLY_M44_V4               : u8 = 0x12;
 
 pub fn write_push(bytes: &mut Vec<u8>, src: RegisterName, src_token: &Token, entry_type: EntryType) -> Result<(), SourceError> {
     bytes.push(if src.is_vector() { INSTRUCTION_VECTOR_PUSH } else { INSTRUCTION_SCALAR_PUSH });
@@ -165,6 +174,7 @@ pub fn write_mov(bytes: &mut Vec<u8>, mov_token: &Token, dst: RegisterName, dst_
 
 
 pub fn write_cmov(bytes: &mut Vec<u8>, mov_token: &Token, cond: RegisterName, dst: RegisterName, dst_component: Option<&Token>, src: RegisterName, src_component: Option<&Token>, entry_type: EntryType) -> Result<(), SourceError> {
+    println!("write_cmov(cond: {:?}, dst: {:?}, dst_component: {:?}, src: {:?}, src_component: {:?}, entry_type: {:?}", cond, dst, dst_component, src, src_component, entry_type);
     Ok(match (dst.is_vector(), dst_component, src.is_vector(), src_component) {
         (true,  None,            true,  None           ) => {
             bytes.push(INSTRUCTION_COND_VECTOR_COPY);
@@ -190,6 +200,7 @@ pub fn write_cmov(bytes: &mut Vec<u8>, mov_token: &Token, cond: RegisterName, ds
         },
 
         (true,  Some(component), false, None           ) => {
+            println!("writing INSTRUCTION_COND_SCALAR_TO_VECTOR_COMPONENT_COPY");
             let component = Component::from_token(component)?;
             bytes.push(INSTRUCTION_COND_SCALAR_TO_VECTOR_COMPONENT_COPY);
             cond.write(bytes, entry_type);
@@ -225,4 +236,124 @@ pub fn write_cmov(bytes: &mut Vec<u8>, mov_token: &Token, cond: RegisterName, ds
             })?
         }
     })
+}
+
+impl Comparison {
+    fn write(&self, bytes: &mut Vec<u8>) {
+        let byte = match self {
+            Comparison::Eq  => 0x00,
+            Comparison::Neq => 0x01,
+            Comparison::Lt  => 0x02,
+            Comparison::Lte => 0x03,
+        };
+        bytes.push(byte);
+    }
+}
+
+pub fn write_fcmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: RegisterName, b: RegisterName, comparison: Comparison, entry_type: EntryType) -> Result<(), SourceError> {
+    let opcode = match (a.is_vector(), b.is_vector(), dst.is_vector()) {
+        (true, true, true)    => INSTRUCTION_COMPARE_VECTOR_F32,
+        (false, false, false) => INSTRUCTION_COMPARE_SCALAR_F32,
+        _ => {
+            let bool_to_type_name = |x: bool| if x { "vector" } else { "scalar" };
+            Err(SourceError {
+                message: format!(
+                    "Invalid operand types - dst: {}, a: {}, b: {}",
+                    bool_to_type_name(dst.is_vector()),
+                    bool_to_type_name(a.is_vector()),
+                    bool_to_type_name(b.is_vector())
+                ),
+                line: cmp_token.line,
+                column: cmp_token.column,
+            })?
+        }
+    };
+    bytes.push(opcode);
+    dst.write(bytes, entry_type);
+    a.write(bytes, entry_type);
+    b.write(bytes, entry_type);
+    comparison.write(bytes);
+    Ok(())
+}
+
+pub fn write_cmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: RegisterName, b: RegisterName, comparison: Comparison, entry_type: EntryType) -> Result<(), SourceError> {
+    let opcode = match (a.is_vector(), b.is_vector(), dst.is_vector()) {
+        (true, true, true)    => INSTRUCTION_COMPARE_VECTOR_I32,
+        (false, false, false) => INSTRUCTION_COMPARE_SCALAR_I32,
+        _ => {
+            let bool_to_type_name = |x: bool| if x { "vector" } else { "scalar" };
+            Err(SourceError {
+                message: format!(
+                    "Invalid operand types - dst: {}, a: {}, b: {}",
+                    bool_to_type_name(dst.is_vector()),
+                    bool_to_type_name(a.is_vector()),
+                    bool_to_type_name(b.is_vector())
+                ),
+                line: cmp_token.line,
+                column: cmp_token.column,
+            })?
+        }
+    };
+    bytes.push(opcode);
+    dst.write(bytes, entry_type);
+    a.write(bytes, entry_type);
+    b.write(bytes, entry_type);
+    comparison.write(bytes);
+    Ok(())
+}
+
+pub fn write_ucmp(bytes: &mut Vec<u8>, cmp_token: &Token, dst: RegisterName, a: RegisterName, b: RegisterName, comparison: Comparison, entry_type: EntryType) -> Result<(), SourceError> {
+    let opcode = match (a.is_vector(), b.is_vector(), dst.is_vector()) {
+        (true, true, true)    => INSTRUCTION_COMPARE_VECTOR_U32,
+        (false, false, false) => INSTRUCTION_COMPARE_SCALAR_U32,
+        _ => {
+            let bool_to_type_name = |x: bool| if x { "vector" } else { "scalar" };
+            Err(SourceError {
+                message: format!(
+                    "Invalid operand types - dst: {}, a: {}, b: {}",
+                    bool_to_type_name(dst.is_vector()),
+                    bool_to_type_name(a.is_vector()),
+                    bool_to_type_name(b.is_vector())
+                ),
+                line: cmp_token.line,
+                column: cmp_token.column,
+            })?
+        }
+    };
+    bytes.push(opcode);
+    dst.write(bytes, entry_type);
+    a.write(bytes, entry_type);
+    b.write(bytes, entry_type);
+    comparison.write(bytes);
+    Ok(())
+}
+
+pub fn write_mul_m44_v4(bytes: &mut Vec<u8>, mul_token: &Token, dst: RegisterName, a0: RegisterName, a1: RegisterName, a2: RegisterName, a3: RegisterName, x: RegisterName, entry_type: EntryType) -> Result<(), SourceError> {
+    match dst.is_vector() && a0.is_vector() && a1.is_vector() && a2.is_vector() && a3.is_vector() && x.is_vector() {
+        true => {},
+        false =>{
+            let bool_to_type_name = |x: bool| if x { "vector" } else { "scalar" };
+            Err(SourceError {
+                message: format!(
+                    "Invalid operand types - dst: {}, a0: {}, a1: {}, a2: {}, a3: {}, x: {}",
+                    bool_to_type_name(dst.is_vector()),
+                    bool_to_type_name(a0.is_vector()),
+                    bool_to_type_name(a1.is_vector()),
+                    bool_to_type_name(a2.is_vector()),
+                    bool_to_type_name(a3.is_vector()),
+                    bool_to_type_name(x.is_vector())
+                ),
+                line: mul_token.line,
+                column: mul_token.column,
+            })?
+        }
+    }
+    bytes.push(INSTRUCTION_MATRIX_MULTIPLY_M44_V4);
+    dst.write(bytes, entry_type);
+    a0.write(bytes, entry_type);
+    a1.write(bytes, entry_type);
+    a2.write(bytes, entry_type);
+    a3.write(bytes, entry_type);
+    x.write(bytes, entry_type);
+    Ok(())
 }

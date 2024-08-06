@@ -6,10 +6,12 @@ use core::ptr::addr_of_mut;
 
 global_asm!(include_str!("init.s"));
 
-use rvfm::gpu::*;
-use rvfm::command_list::*;
-use rvfm::intrin::*;
-use rvfm::debug::*;
+use rvfm_platform::gpu::*;
+use rvfm_platform::command_list::*;
+use rvfm_platform::intrin::*;
+use rvfm_platform::debug::*;
+
+use glam::{Mat4, Vec3, Quat};
 
 const VERTEX_SHADER_ID: u8 = 0;
 const FRAGMENT_SHADER_ID: u8 = 1;
@@ -33,9 +35,11 @@ const VERTEX_DATA: &'static [f32] = &[
     0.0,  1.0,  1.0,
 ];
 
-const CONSTANT_DATA: &'static [[f32; 4]] = &[
-    [0.0, 1.0, 0.0, 1.0]
-];
+#[repr(C, align(4))]
+pub struct ConstantData {
+    pub numeric_constants: [f32; 4],
+    pub transform_matrix: [f32; 16],
+}
 
 const VERTEX_STATE: VertexState = VertexState::new(
     &[
@@ -62,7 +66,7 @@ const RASTERIZER_STATE: RasterizerState = RasterizerState::new(
     &[
         VaryingAssignment {
             t: VaryingType::F32x4,
-            i: Interpolation::Linear,
+            i: Interpolation::Barycentric,
             slot: 0x10,
             _dummy: 0,
         }
@@ -74,7 +78,35 @@ const RASTERIZER_STATE: RasterizerState = RasterizerState::new(
             offset: 0,
             c: ShaderCardinality::V4,
             t: ShaderInputType::F32FromF32,
-        }
+        },
+        ConstantAssignment {
+            constant: 1,
+            src_buffer: CONSTANT_BUFFER_ID,
+            offset: 16,
+            c: ShaderCardinality::V4,
+            t: ShaderInputType::F32FromF32,
+        },
+        ConstantAssignment {
+            constant: 2,
+            src_buffer: CONSTANT_BUFFER_ID,
+            offset: 32,
+            c: ShaderCardinality::V4,
+            t: ShaderInputType::F32FromF32,
+        },
+        ConstantAssignment {
+            constant: 3,
+            src_buffer: CONSTANT_BUFFER_ID,
+            offset: 48,
+            c: ShaderCardinality::V4,
+            t: ShaderInputType::F32FromF32,
+        },
+        ConstantAssignment {
+            constant: 4,
+            src_buffer: CONSTANT_BUFFER_ID,
+            offset: 64,
+            c: ShaderCardinality::V4,
+            t: ShaderInputType::F32FromF32,
+        },
     ],
     &[0, 1],
     &[0]
@@ -96,7 +128,7 @@ const PIPELINE_STATE: GraphicsPipelineState = GraphicsPipelineState::new(
     &RASTERIZER_STATE
 );
 
-fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], present_completion: &'c mut u32) -> Result<(CommandList<'a, GpuCommands>, CommandListCompletion<'c>), ()> {
+fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], constant_data: &ConstantData, present_completion: &'c mut u32) -> Result<(CommandList<'a, GpuCommands>, CommandListCompletion<'c>), ()> {
     let texture_config = TextureConfig {
         width: 512,
         height: 384,
@@ -111,12 +143,14 @@ fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], present_compl
         y_high: 384,
     };
 
+    *present_completion = 0;
+
     let (builder, present_completion) = CommandListBuilder::new(command_list_bytes)
         .set_video_mode(VideoResolution::R512x384, true, true, true)?
         .configure_buffer              (VERTEX_BUFFER_ID,         VERTEX_DATA.len() as u32 * core::mem::size_of::<f32>() as u32)?
         .upload_buffer                 (VERTEX_BUFFER_ID,         VERTEX_DATA.as_ptr() as *const u8)?
-        .configure_buffer              (CONSTANT_BUFFER_ID,       CONSTANT_DATA.len() as u32 * core::mem::size_of::<[f32; 4]>() as u32)?
-        .upload_buffer                 (CONSTANT_BUFFER_ID,       CONSTANT_DATA.as_ptr() as *const u8)?
+        .configure_buffer              (CONSTANT_BUFFER_ID,       core::mem::size_of::<ConstantData>() as u32)?
+        .upload_buffer                 (CONSTANT_BUFFER_ID,       constant_data as *const _ as *const u8)?
         
         .configure_texture             (RENDER_TEXTURE_ID,        &texture_config)?
         
@@ -137,15 +171,22 @@ extern "C" fn main() {
     let mut completion_variable = 0u32;
     let mut present_completion_variable = 0u32;
     let mut command_list_bytes = [0u8; 1024];
-    let (command_list, mut present_completion) = build_commandlist(&mut command_list_bytes[..], &mut present_completion_variable).unwrap();
-    let mut submit_completion = gpu_submit(command_list, &mut completion_variable);
+    let mut angle = 0.0;
+    let mut constant_data = ConstantData {
+        numeric_constants: [0.0, 0.0, 0.5, 1.0],
+        transform_matrix: Mat4::IDENTITY.to_cols_array()
+    };
+    loop {
+        angle += 0.01;
+        constant_data.transform_matrix = Mat4::from_rotation_z(angle).to_cols_array();
+        {
+            let (command_list, mut present_completion) = build_commandlist(&mut command_list_bytes[..], &constant_data, &mut present_completion_variable).unwrap();
+            let mut submit_completion = gpu_submit(command_list, &mut completion_variable);
+            submit_completion.wait();
+            present_completion.wait();
+        }
+    }
 
-    println!("waiting for submit completion...");
-    submit_completion.wait();
-    println!("waiting for present completion...");
-    present_completion.wait();
-    println!("finished!");
-    
     loop {
         wfi();
     }

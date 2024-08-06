@@ -196,12 +196,12 @@ f8000238:	0000                	.2byte	0x0
 Disassembly of section .riscv.attributes:
 
 00000000 <.riscv.attributes>:
-   0:	3b41                	.2byte	0x3b41
+   0:	4041                	.2byte	0x4041
    2:	0000                	.2byte	0x0
    4:	7200                	.2byte	0x7200
    6:	7369                	.2byte	0x7369
    8:	01007663          	bgeu	zero,a6,14 <_bss+0x14>
-   c:	0031                	.2byte	0x31
+   c:	0036                	.2byte	0x36
    e:	0000                	.2byte	0x0
   10:	1004                	.2byte	0x1004
   12:	7205                	.2byte	0x7205
@@ -211,15 +211,20 @@ Disassembly of section .riscv.attributes:
   1a:	5f31                	.2byte	0x5f31
   1c:	326d                	.2byte	0x326d
   1e:	3070                	.2byte	0x3070
-  20:	665f 7032 5f32      	.byte	0x5f, 0x66, 0x32, 0x70, 0x32, 0x5f
-  26:	697a                	.2byte	0x697a
-  28:	32727363          	bgeu	tp,t2,34e <_bss+0x34e>
-  2c:	3070                	.2byte	0x3070
-  2e:	7a5f 6d6d 6c75      	.byte	0x5f, 0x7a, 0x6d, 0x6d, 0x75, 0x6c
-  34:	7031                	.2byte	0x7031
-  36:	0030                	.2byte	0x30
-  38:	0108                	.2byte	0x108
-  3a:	0b0a                	.2byte	0xb0a
+  20:	615f 7032 5f31      	.byte	0x5f, 0x61, 0x32, 0x70, 0x31, 0x5f
+  26:	3266                	.2byte	0x3266
+  28:	3270                	.2byte	0x3270
+  2a:	7a5f 6369 7273      	.byte	0x5f, 0x7a, 0x69, 0x63, 0x73, 0x72
+  30:	7032                	.2byte	0x7032
+  32:	5f30                	.2byte	0x5f30
+  34:	6d7a                	.2byte	0x6d7a
+  36:	756d                	.2byte	0x756d
+  38:	316c                	.2byte	0x316c
+  3a:	3070                	.2byte	0x3070
+  3c:	0800                	.2byte	0x800
+  3e:	0a01                	.2byte	0xa01
+  40:	0b              	Address 0x40 is out of bounds.
+
 
 Disassembly of section .comment:
 

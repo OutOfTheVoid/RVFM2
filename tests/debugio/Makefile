@@ -4,7 +4,7 @@ OBJCOPY = riscv64-unknown-elf-objcopy
 MKDIR = mkdir
 RMDIR = rm -rf
 
-AS_FLAGS = -march=rv32imf
+AS_FLAGS = -march=rv32imaf
 LD_FLAGS = -T $(LD_SCRIPT) -nostdlib -b elf32-littleriscv
 OBJCOPY_FLAGS = --output-target=binary
 

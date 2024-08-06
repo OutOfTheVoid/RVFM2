@@ -1,0 +1,12 @@
+[package]
+name = "rvfm_platform"
+version = "0.1.0"
+edition = "2021"
+links = "rvfm_platform"
+build = "build.rs"
+
+[dependencies]
+bytemuck = "1.16"
+
+[features]
+multihart = []

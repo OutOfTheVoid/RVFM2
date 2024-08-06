@@ -6,11 +6,10 @@ use core::ptr::addr_of_mut;
 
 global_asm!(include_str!("init.s"));
 
-use rvfm::gpu::*;
-use rvfm::command_list::*;
-use rvfm::debug::*;
-use rvfm::intrin::*;
-use rvfm::input::*;
+use rvfm_platform::gpu::*;
+use rvfm_platform::command_list::*;
+use rvfm_platform::intrin::*;
+use rvfm_platform::input::*;
 
 fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], present_completion: &'c mut u32) -> Result<(CommandList<'a, GpuCommands>, CommandListCompletion<'c>), ()> {
     let texture_config = TextureConfig {

@@ -23,6 +23,7 @@ pub enum Comparison {
     Lte
 }
 
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum InstructionType {
     Push,
@@ -49,6 +50,7 @@ pub enum InstructionType {
     Ln,
     Exp,
     Cmp(Comparison),
+    FCmp(Comparison),
     Add,
     Sub,
     Mul,
@@ -65,12 +67,24 @@ pub enum InstructionType {
     Norm,
     Mag,
     Cross,
+    MatrixMultiply4x4V4,
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum MatrixMultiplyType {
+    Matrix4x4_By_Vector4,
+    Matrix4x3_By_Vector3,
+    Matrix3x3_By_Vector3,
+    Matrix2x3_By_Vector2,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum VectorBuiltin {
     VertexPosition,
     Barycentric,
+    Linear,
+    VertexIds
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -290,6 +304,8 @@ pub fn run_lexer(input: &str) -> Result<Vec<Token>, Vec<SourceError>>  {
                     match value_string.to_lowercase().as_str() {
                         "vertex_position"  => TokenType::Register(RegisterName::BuiltinV(VectorBuiltin::VertexPosition)),
                         "barycentric"      => TokenType::Register(RegisterName::BuiltinV(VectorBuiltin::Barycentric)),
+                        "linear"           => TokenType::Register(RegisterName::BuiltinV(VectorBuiltin::Linear)),
+                        "vertex_ids"       => TokenType::Register(RegisterName::BuiltinV(VectorBuiltin::VertexIds)),
                         "depth"            => TokenType::Register(RegisterName::BuiltinS(ScalarBuiltin::Depth)),
                         "vertex_id"        => TokenType::Register(RegisterName::BuiltinS(ScalarBuiltin::VertexId)),
                         "provoking_vertex" => TokenType::Register(RegisterName::BuiltinS(ScalarBuiltin::ProvokingVertex)),
@@ -326,16 +342,20 @@ pub fn run_lexer(input: &str) -> Result<Vec<Token>, Vec<SourceError>>  {
                         "cmp_neq"          => TokenType::Instruction(InstructionType::Cmp(Comparison::Neq)),
                         "cmp_lt"           => TokenType::Instruction(InstructionType::Cmp(Comparison::Lt)),
                         "cmp_lte"          => TokenType::Instruction(InstructionType::Cmp(Comparison::Lte)),
+                        "fcmp_eq"          => TokenType::Instruction(InstructionType::FCmp(Comparison::Eq)),
+                        "fcmp_neq"         => TokenType::Instruction(InstructionType::FCmp(Comparison::Neq)),
+                        "fcmp_lt"          => TokenType::Instruction(InstructionType::FCmp(Comparison::Lt)),
+                        "fcmp_lte"         => TokenType::Instruction(InstructionType::FCmp(Comparison::Lte)),
+                        "ucmp_eq"          => TokenType::Instruction(InstructionType::UCmp(Comparison::Eq)),
+                        "ucmp_neq"         => TokenType::Instruction(InstructionType::UCmp(Comparison::Neq)),
+                        "ucmp_lt"          => TokenType::Instruction(InstructionType::UCmp(Comparison::Lt)),
+                        "ucmp_lte"         => TokenType::Instruction(InstructionType::UCmp(Comparison::Lte)),
                         "add"              => TokenType::Instruction(InstructionType::Add),
                         "sub"              => TokenType::Instruction(InstructionType::Sub),
                         "mul"              => TokenType::Instruction(InstructionType::Mul),
                         "div"              => TokenType::Instruction(InstructionType::Div),
                         "mod"              => TokenType::Instruction(InstructionType::Mod),
                         "atan2"            => TokenType::Instruction(InstructionType::Atan2),
-                        "ucmp_eq"          => TokenType::Instruction(InstructionType::UCmp(Comparison::Eq)),
-                        "ucmp_ne"          => TokenType::Instruction(InstructionType::UCmp(Comparison::Neq)),
-                        "ucmp_lt"          => TokenType::Instruction(InstructionType::UCmp(Comparison::Lt)),
-                        "ucmp_lte"         => TokenType::Instruction(InstructionType::UCmp(Comparison::Lte)),
                         "and"              => TokenType::Instruction(InstructionType::And),
                         "andn"             => TokenType::Instruction(InstructionType::AndN),
                         "or"               => TokenType::Instruction(InstructionType::Or),
@@ -345,6 +365,7 @@ pub fn run_lexer(input: &str) -> Result<Vec<Token>, Vec<SourceError>>  {
                         "norm"             => TokenType::Instruction(InstructionType::Norm),
                         "mag"              => TokenType::Instruction(InstructionType::Mag),
                         "cross"            => TokenType::Instruction(InstructionType::Cross),
+                        "mul_m44_v4"       => TokenType::Instruction(InstructionType::MatrixMultiply4x4V4),
                         _                  => TokenType::Name,
                     }
                 };

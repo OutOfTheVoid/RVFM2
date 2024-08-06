@@ -104,7 +104,7 @@ fn expect_write_register<'t, I: Iterator<Item = &'t Token>>(iter: &mut Peekable<
 }
 
 fn expect_read_register<'t, I: Iterator<Item = &'t Token>>(iter: &mut Peekable<I>, entry_type: EntryType) -> Result<(RegisterName, &'t Token), SourceError> {
-    let token = expect_token_with(&format!("register readable from shader with {:?}", entry_type),
+    let token = expect_token_with(&format!("register readable from {:?} shader", entry_type),
         |t| match t {
                 TokenType::Register(RegisterName::ConstantS(_)) |
                 TokenType::Register(RegisterName::ConstantV(_)) |
@@ -123,7 +123,9 @@ fn expect_read_register<'t, I: Iterator<Item = &'t Token>>(iter: &mut Peekable<I
                 TokenType::Register(RegisterName::BuiltinV(vector_builtin)) => {
                     match (entry_type, vector_builtin) {
                         (EntryType::Fragment, VectorBuiltin::VertexPosition) |
-                        (EntryType::Fragment, VectorBuiltin::Barycentric   ) => true,
+                        (EntryType::Fragment, VectorBuiltin::Barycentric   ) |
+                        (EntryType::Fragment, VectorBuiltin::Linear         ) |
+                        (EntryType::Fragment, VectorBuiltin::VertexIds     ) => true,
                         _ => false
                     }
                 }
@@ -136,6 +138,8 @@ fn expect_read_register<'t, I: Iterator<Item = &'t Token>>(iter: &mut Peekable<I
         unreachable!()
     }
 }
+
+
 
 pub fn run_assembler(tokens: &[Token], entry_type: EntryType) -> Result<Box<[u8]>, Vec<SourceError>> {
     let mut bytes = Vec::new();
@@ -235,6 +239,7 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
         },
         InstructionType::CMov => {
             let cond = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
             let dst = expect_write_register(iter, entry_type)?;
             let dst_component = if let Some(_dot_token) = try_expect_token(TokenType::Dot, iter) {
                 Some(expect_token(TokenType::Name, iter)?)
@@ -250,7 +255,9 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
             };
             write_cmov(bytes, instruction_token, cond.0, dst.0, dst_component, src.0, src_component, entry_type)?;
         },
-        InstructionType::Read => todo!(),
+        InstructionType::Read => {
+            todo!()
+        },
         InstructionType::Write => todo!(),
         InstructionType::CRead => todo!(),
         InstructionType::CWrite => todo!(),
@@ -269,14 +276,36 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
         InstructionType::Atan => todo!(),
         InstructionType::Ln => todo!(),
         InstructionType::Exp => todo!(),
-        InstructionType::Cmp(_) => todo!(),
+        InstructionType::Cmp(comparison) => {
+            let (dst, _) = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (a, _) = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (b, _) = expect_read_register(iter, entry_type)?;
+            write_cmp(bytes, instruction_token, dst, a, b, comparison, entry_type)?;
+        },
+        InstructionType::UCmp(comparison) => {
+            let (dst, _) = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (a, _) = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (b, _) = expect_read_register(iter, entry_type)?;
+            write_ucmp(bytes, instruction_token, dst, a, b, comparison, entry_type)?;
+        },
+        InstructionType::FCmp(comparison) => {
+            let (dst, _) = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (a, _) = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (b, _) = expect_read_register(iter, entry_type)?;
+            write_fcmp(bytes, instruction_token, dst, a, b, comparison, entry_type)?;
+        },
         InstructionType::Add => todo!(),
         InstructionType::Sub => todo!(),
         InstructionType::Mul => todo!(),
         InstructionType::Div => todo!(),
         InstructionType::Mod => todo!(),
         InstructionType::Atan2 => todo!(),
-        InstructionType::UCmp(_) => todo!(),
         InstructionType::And => todo!(),
         InstructionType::AndN => todo!(),
         InstructionType::Or => todo!(),
@@ -286,6 +315,20 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
         InstructionType::Norm => todo!(),
         InstructionType::Mag => todo!(),
         InstructionType::Cross => todo!(),
+        InstructionType::MatrixMultiply4x4V4 => {
+            let (dst, _) = expect_write_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (a0, _) = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (a1, _) = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (a2, _) = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (a3, _) = expect_read_register(iter, entry_type)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (x, _) = expect_read_register(iter, entry_type)?;
+            write_mul_m44_v4(bytes, &instruction_token, dst, a0, a1, a2, a3, x, entry_type)?;
+        }
     }
     Ok(())
 }

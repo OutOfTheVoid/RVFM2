@@ -1,8 +1,13 @@
 entry_v
-    mov vertex_position, vin_0
-    mov vout_0, vin_1
-    mov sloc_0, vconst_0.w
-    mov vout_0.w, sloc_0
+    mul_m44_v4 vertex_position, vconst_1, vconst_2, vconst_3, vconst_4, vin_0
+    mov  vout_0, vin_1
+    mov  sloc_0, vconst_0.w
+    mov  vout_0.w, sloc_0
 
 entry_f
     mov vout_0, vin_0
+    mov sloc_0, vin_0.z
+    mov sloc_1, vconst_0.z
+    mov sloc_2, vconst_0.x
+    fcmp_lt sloc_0, sloc_1, sloc_0
+    cmov sloc_0, vout_0.z, sloc_2
