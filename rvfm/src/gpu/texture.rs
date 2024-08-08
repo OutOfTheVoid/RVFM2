@@ -1,4 +1,4 @@
-use std::{sync::Arc, fmt::Debug};
+use std::fmt::Debug;
 
 use bytemuck::{cast_slice, Pod, cast_slice_mut};
 

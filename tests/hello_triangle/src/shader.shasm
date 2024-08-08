@@ -17,7 +17,7 @@ alias! temp: sloc_0
 
 entry!
 
-    mul_m44_v4
+    mul.m44.v4
         output_position,
         txfm_col_0, txfm_col_1, txfm_col_2, txfm_col_3,
         input_position
@@ -50,7 +50,7 @@ entry!
     mov threshold, CONSTANTS.z
 
     mov zero, CONSTANTS.x
-    fcmp_lt red_above_threshold, threshold, red_value
+    cmp.f.lt red_above_threshold, threshold, red_value
 
 
     cmov red_above_threshold, output_color.r, zero

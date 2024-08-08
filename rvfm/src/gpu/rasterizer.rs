@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use super::{buffer::BufferModule, fragment_shader::*, shader::*, texture::TextureModule, vertex_shader::*};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -126,17 +124,16 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
                 resource_map: call.resource_map,
                 shader_modules: & *(call.shader_modules as *const _),
             } };
-            let shader_result = match run_vertex_shader(vertex_call) {
+            match run_vertex_shader(vertex_call) {
                 Ok(result) => {
                     vertex_count = result.remaining_count;
                     vertex_offset = result.remaining_offset;
                 },
                 Err(e) => {
-                    println!("ERROR: {:?}", e);
+                    println!("GPU: VERTEX SHADER ERROR: {:?}", e);
                     return
                 },
             };
-            
         }
 
         let target_rect_width = call.target_rect.lower_right.0 - call.target_rect.upper_left.0;
@@ -221,8 +218,9 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
                     x_min = x_min.min(x);
                     x_max = x_max.max(x);
                 }
-                let x_min = x_min.ceil() as u32;
-                let x_max = x_max.floor() as u32;
+                let x_min = (x_min.ceil() as u32).max(x_min_clip);
+                let x_max = (x_max.floor() as u32).min(x_max_clip);
+                
                 for x in x_min..=x_max {
                     let mut dx_pn = [0.0f32; 3];
                     let mut dy_pn = [0.0f32; 3];
@@ -230,12 +228,12 @@ pub fn run_rasterizer(mut call: RasterizerCall<'_>) {
                         dx_pn[e] = x as f32 - points[e][0];
                         dy_pn[e] = y as f32 - points[e][1];
                     }
-                    let mut areas = [
+                    let areas = [
                         dx_pn[2] * dy_pn[1] - dx_pn[1] * dy_pn[2],
                         dx_pn[0] * dy_pn[2] - dx_pn[2] * dy_pn[0],
                         dx_pn[1] * dy_pn[0] - dx_pn[0] * dy_pn[1],
                     ];
-                    let mut recip_lengths = [
+                    let recip_lengths = [
                         1.0f32 / (dx_pn[0].powf(2.0) + dy_pn[0].powf(2.0)).sqrt(),
                         1.0f32 / (dx_pn[1].powf(2.0) + dy_pn[1].powf(2.0)).sqrt(),
                         1.0f32 / (dx_pn[2].powf(2.0) + dy_pn[2].powf(2.0)).sqrt(),

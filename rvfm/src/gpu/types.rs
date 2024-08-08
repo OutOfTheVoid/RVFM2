@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VideoResolution {
     V512x384,

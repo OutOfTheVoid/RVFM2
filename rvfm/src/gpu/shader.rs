@@ -264,7 +264,6 @@ pub enum ScalarUnaryOp {
     Atan       ,
     Ln         ,
     Exp        ,
-
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -310,25 +309,28 @@ pub enum ScalarBinaryOp {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ScalarTernaryOp {
     Fma  ( OpDataType ),
-    Lerp               ,
 }
 
 #[allow(unused)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VectorToVectorUnaryOp {
-    Normalize,
+    Normalize2,
+    Normalize3,
+    Normalize4,
 }
 
 #[allow(unused)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VectorToScalarUnaryOp {
-    Magnitude,
+    Magnitude2,
+    Magnitude3,
+    Magnitude4,
 }
 
 #[allow(unused)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VectorToVectorBinaryOp {
-    CrossProduct3,
+    CrossProduct,
 }
 
 #[allow(unused)]
@@ -1134,7 +1136,7 @@ impl ShadingUnitContext {
                             RegisterRead::Uniform(addr_register) => {
                                 match from_register {
                                     RegisterRead::Core(from_register_list) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + *addr_register as usize, from_register_list[i])),
-                                    RegisterRead::Uniform(from_register) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + *addr_register as usize, *from_register)),
+                                    RegisterRead::Uniform(from_register) => (0..n).for_each(|_i| write_fn(bytes, *offset as usize + *addr_register as usize, *from_register)),
                                 }
                             }
                         }
@@ -1142,7 +1144,7 @@ impl ShadingUnitContext {
                     None => {
                         match from_register {
                             RegisterRead::Core(from_register_list) => (0..n).for_each(|i| write_fn(bytes, *offset as usize, from_register_list[i])),
-                            RegisterRead::Uniform(from_register) => (0..n).for_each(|i| write_fn(bytes, *offset as usize, *from_register)),
+                            RegisterRead::Uniform(from_register) => (0..n).for_each(|_i| write_fn(bytes, *offset as usize, *from_register)),
                         }
                     }
                 }
@@ -1209,7 +1211,7 @@ impl ShadingUnitContext {
                             RegisterRead::Uniform(addr_register) => {
                                 match from_register {
                                     RegisterRead::Core(from_register_list) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + *addr_register as usize, from_register_list[i])),
-                                    RegisterRead::Uniform(from_register) => (0..n).for_each(|i| write_fn(bytes, *offset as usize + *addr_register as usize, *from_register)),
+                                    RegisterRead::Uniform(from_register) => (0..n).for_each(|_i| write_fn(bytes, *offset as usize + *addr_register as usize, *from_register)),
                                 }
                             }
                         }
@@ -1217,7 +1219,7 @@ impl ShadingUnitContext {
                     None => {
                         match from_register {
                             RegisterRead::Core(from_register_list) => (0..n).for_each(|i| write_fn(bytes, *offset as usize, from_register_list[i])),
-                            RegisterRead::Uniform(from_register) => (0..n).for_each(|i| write_fn(bytes, *offset as usize, *from_register)),
+                            RegisterRead::Uniform(from_register) => (0..n).for_each(|_i| write_fn(bytes, *offset as usize, *from_register)),
                         }
                     }
                 }
@@ -1226,7 +1228,6 @@ impl ShadingUnitContext {
                 let texture_number = resource_map.texture[*texture as usize] as usize;
                 let texture = &texture_modules[texture_number];
                 let pixel_layout = texture.config.pixel_layout;
-                let width = texture.config.width;
                 let coord_register = self.read_vector_register(*src_xy_u32, run_context);
                 let vector_register = self.write_vector_register(*dst, run_context)?;
                 let texture_load_op = match (*load_type, pixel_layout) {
@@ -1451,7 +1452,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u32; 4]>(u, v);
                         data.map(|x| f32::from_bits(x) as i32 as u32)
                     },
-                    (TextureLoadType::I32FromF32, _) => |u: u32, v: u32, texture: &TextureModule| [0, 0, 0, 0],
+                    (TextureLoadType::I32FromF32, _) => |_u: u32, _v: u32, _texture: &TextureModule| [0, 0, 0, 0],
                 };
                 match coord_register {
                     RegisterRead::Core(coord_register_list) => (0..n).for_each(|i| {
@@ -1504,7 +1505,7 @@ impl ShadingUnitContext {
                     (TextureLoadType::I32FromF32,  PixelDataLayout::D16x2) |
                     (TextureLoadType::I32FromF32,  PixelDataLayout::D16x4) => None?,
 
-                    (TextureLoadType::I32FromF32,  PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::I32FromF32,  PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u32>(u, v);
                         f32::from_bits(x) as i32 as u32
                     },
@@ -1519,7 +1520,7 @@ impl ShadingUnitContext {
 
                     (TextureLoadType::I32FromInt,  PixelDataLayout::D32x1) |
                     (TextureLoadType::I32FromUInt, PixelDataLayout::D32x1) |
-                    (TextureLoadType::F32FromF32,  PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::F32FromF32,  PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u32>(u, v);
                         x
                     },
@@ -1535,7 +1536,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u32; 4]>(u, v);
                         data[channel]
                     },
-                    (TextureLoadType::I32FromUInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u16>(u, v);
                         x as u32
                     },
@@ -1547,7 +1548,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u16; 4]>(u, v);
                         data[channel] as u32
                     },
-                    (TextureLoadType::I32FromUInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::I32FromUInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u8>(u, v);
                         x as u32
                     },
@@ -1559,7 +1560,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u8; 4]>(u, v);
                         data[channel] as u32
                     },
-                    (TextureLoadType::I32FromInt,  PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u16>(u, v);
                         x as i16 as i32 as u32
                     },
@@ -1571,7 +1572,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u16; 4]>(u, v);
                         data[channel] as i16 as i32 as u32
                     },
-                    (TextureLoadType::I32FromInt,  PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::I32FromInt,  PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u8>(u, v);
                         x as i8 as i32 as u32
                     },
@@ -1584,8 +1585,8 @@ impl ShadingUnitContext {
                         data[channel] as i8 as i32 as u32
                     },
 
-                    (TextureLoadType::F32FromINorm, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
-                        let x = texture.fetch::<(u32)>(u, v);
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
+                        let x = texture.fetch::<u32>(u, v);
                         (x as i32 as f32 / std::i32::MAX as f32).to_bits()
                     },
                     (TextureLoadType::F32FromINorm, PixelDataLayout::D32x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
@@ -1596,8 +1597,8 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u32; 4]>(u, v);
                         (data[channel] as i32 as f32 / std::i32::MAX as f32).to_bits()
                     },
-                    (TextureLoadType::F32FromINorm, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
-                        let x = texture.fetch::<(u16)>(u, v);
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
+                        let x = texture.fetch::<u16>(u, v);
                         (x as i16 as i32 as f32 / std::i16::MAX as f32).to_bits()
                     },
                     (TextureLoadType::F32FromINorm, PixelDataLayout::D16x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
@@ -1608,8 +1609,8 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u16; 4]>(u, v);
                         (data[channel] as i16 as i32 as f32 / std::i16::MAX as f32).to_bits()
                     },
-                    (TextureLoadType::F32FromINorm, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
-                        let x = texture.fetch::<(u8)>(u, v);
+                    (TextureLoadType::F32FromINorm, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
+                        let x = texture.fetch::<u8>(u, v);
                         (x as i8 as i32 as f32 / std::i8::MAX as f32).to_bits()
                     },
                     (TextureLoadType::F32FromINorm, PixelDataLayout::D8x2) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
@@ -1620,7 +1621,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u8; 4]>(u, v);
                         (data[channel] as i8 as i32 as f32 / std::i8::MAX as f32).to_bits()
                     },
-                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u32>(u, v);
                         (x as f32 / std::u32::MAX as f32).to_bits()
                     },
@@ -1632,7 +1633,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u32; 4]>(u, v);
                         (data[channel] as f32 / std::u32::MAX as f32).to_bits()
                     },
-                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u16>(u, v);
                         (x as f32 / std::u16::MAX as f32).to_bits()
                     },
@@ -1644,7 +1645,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u16; 4]>(u, v);
                         (data[channel] as f32 / std::u16::MAX as f32).to_bits()
                     },
-                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::F32FromUNorm, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u8>(u, v);
                         (x as f32 / std::u8::MAX as f32).to_bits()
                     },
@@ -1657,7 +1658,7 @@ impl ShadingUnitContext {
                         (data[channel] as f32 / std::u8::MAX as f32).to_bits()
                     },
 
-                    (TextureLoadType::F32FromInt, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u32>(u, v);
                         (x as i32 as f32).to_bits()
                     },
@@ -1669,7 +1670,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u32; 4]>(u, v);
                         (data[channel] as i32 as f32).to_bits()
                     },
-                    (TextureLoadType::F32FromInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u16>(u, v);
                         (x as i16 as f32).to_bits()
                     },
@@ -1681,7 +1682,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u16; 4]>(u, v);
                         (data[channel] as i16 as f32).to_bits()
                     },
-                    (TextureLoadType::F32FromInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::F32FromInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u8>(u, v);
                         (x as i8 as f32).to_bits()
                     },
@@ -1694,7 +1695,7 @@ impl ShadingUnitContext {
                         (data[channel] as i8 as f32).to_bits()
                     },
 
-                    (TextureLoadType::F32FromUInt, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D32x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u32>(u, v);
                         (x as f32).to_bits()
                     },
@@ -1706,7 +1707,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u32; 4]>(u, v);
                         (data[channel] as f32).to_bits()
                     },
-                    (TextureLoadType::F32FromUInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D16x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u16>(u, v);
                         (x as f32).to_bits()
                     },
@@ -1718,7 +1719,7 @@ impl ShadingUnitContext {
                         let data = texture.fetch::<[u16; 4]>(u, v);
                         (data[channel] as f32).to_bits()
                     },
-                    (TextureLoadType::F32FromUInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, channel: usize| {
+                    (TextureLoadType::F32FromUInt, PixelDataLayout::D8x1) => |u: u32, v: u32, texture: &TextureModule, _channel: usize| {
                         let x = texture.fetch::<u8>(u, v);
                         (x as f32).to_bits()
                     },
@@ -1897,11 +1898,6 @@ impl ShadingUnitContext {
                     ScalarTernaryOp::Fma(OpDataType::I32) => |a: [u32; 4], b: [u32; 4], c: [u32; 4]| [0, 1, 2, 3].map(|i| {
                         (a[i] as i32).wrapping_mul(b[i] as i32).wrapping_add(c[i] as i32) as u32
                     }),
-                    ScalarTernaryOp::Lerp => |a: [u32; 4], b: [u32; 4], c: [u32; 4]| [0, 1, 2, 3].map(|i| {
-                        let t = f32::from_bits(c[i]);
-                        let rev_t = 1.0 - t;
-                        (f32::from_bits(a[i]) * t + f32::from_bits(b[i]) * rev_t).to_bits()
-                    }),
                 };
                 for i in 0..n {
                     let from_a = match from_a_register {
@@ -1942,12 +1938,14 @@ impl ShadingUnitContext {
                     ScalarUnaryOp::Exp                                     => |x: u32| f32::from_bits(x).exp().to_bits(),
                 };
                 for c in 0..4 {
-                    for i in 0..n {
-                        let from = match from_register {
-                            RegisterRead::Core(register_list) => (register_list[i])[c],
-                            RegisterRead::Uniform(register) => (*register)[c]
-                        };
-                        (to_register[i])[c] = op_fn(from);
+                    if (*mask & (1 << c)) != 0 {
+                        for i in 0..n {
+                            let from = match from_register {
+                                RegisterRead::Core(register_list) => (register_list[i])[c],
+                                RegisterRead::Uniform(register) => (*register)[c]
+                            };
+                            (to_register[i])[c] = op_fn(from);
+                        }
                     }
                 }
             },
@@ -2042,7 +2040,7 @@ impl ShadingUnitContext {
                 RegisterAddress::Output(index, ..) => Some(&mut run_context.scalar_output_array[index as usize]),
                 _ => None
             };
-            register_ref.map(|r| unsafe { (r as *mut _) })
+            register_ref.map(|r| (r as *mut _))
         };
         register_ptr.map(|r| unsafe { &mut *r })
     }

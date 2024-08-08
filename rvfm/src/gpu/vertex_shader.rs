@@ -28,13 +28,13 @@ pub enum VertexShaderError {
 
 pub const VERTEX_SCALAR_INPUT_BUILTIN_VERTEX_ID        : usize = 0x00;
 pub const VERTEX_SCALAR_INPUT_BUILTIN_PROVOKING_VERTEX : usize = 0x01;
-pub const VERTEX_SCALAR_INPUT_USER_OFFSET              : usize = 0x10;
 
 pub const VERTEX_SCALAR_OUTPUT_BUILTIN_VERTEX_DISCARD  : usize = 0x00;
-pub const VERTEX_SCALAR_OUTPUT_USER_OFFSET             : usize = 0x10;
 
 pub const VERTEX_VECTOR_OUTPUT_BUILTIN_VERTEX_POSITION : usize = 0x00;
-pub const VERTEX_VECTOR_OUTPUT_USER_OFFSET             : usize = 0x10;
+
+#[allow(unused)]
+pub const IO_REGISTER_USER_OFFSET                      : usize = 0x10;
 
 pub struct VertexShaderCall<'a> {
     pub shader        : u8,

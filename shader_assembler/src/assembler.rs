@@ -1,16 +1,9 @@
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::iter::Peekable;
 
 use super::lexer::*;
 use super::src_error::*;
 use super::instructions::*;
-
-pub enum AssemblerMode {
-    Vertex,
-    Fragment,
-    Compute,
-}
 
 fn expect_token<'t, I: Iterator<Item = &'t Token>>(t: TokenType, iter: &mut Peekable<I>) -> Result<&'t Token, SourceError> {
     if let Some(token) = iter.peek() {
@@ -61,18 +54,6 @@ fn expect_token_with<'t, I: Iterator<Item = &'t Token>>(description: &str, test:
             line: 0,
             column: 0
         })
-    }
-}
-
-fn try_expect_token_with<'t, I: Iterator<Item = &'t Token>>(description: &str, test: impl Fn(&TokenType) -> bool, iter: &mut Peekable<I>) -> Option<&'t Token> {
-    if let Some(token) = iter.peek() {
-        if test(&token.t) {
-            Some(iter.next().unwrap())
-        } else {
-            None
-        }
-    } else {
-        None
     }
 }
 
@@ -377,19 +358,28 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
         InstructionType::CWrite => todo!(),
         InstructionType::Load => todo!(),
         InstructionType::Store => todo!(),
-        InstructionType::Discard => todo!(),
-        InstructionType::Conv => todo!(),
-        InstructionType::Neg(_)  => todo!(),
-        InstructionType::Sign(_) => todo!(),
-        InstructionType::Recip => todo!(),
-        InstructionType::Sin => todo!(),
-        InstructionType::Cos => todo!(),
-        InstructionType::Tan => todo!(),
-        InstructionType::ASin => todo!(),
-        InstructionType::ACos => todo!(),
-        InstructionType::Atan => todo!(),
-        InstructionType::Ln => todo!(),
-        InstructionType::Exp => todo!(),
+
+        InstructionType::Neg(_)          |
+        InstructionType::Sign(_)         |
+        InstructionType::Recip           |
+        InstructionType::Sin             |
+        InstructionType::Cos             |
+        InstructionType::Tan             |
+        InstructionType::ASin            |
+        InstructionType::ACos            |
+        InstructionType::Atan            |
+        InstructionType::Ln              |
+        InstructionType::Exp             |
+        InstructionType::ConvertF32ToI32 |
+        InstructionType::ConvertF32ToU32 | 
+        InstructionType::ConvertI32ToF32 |
+        InstructionType::ConvertU32ToF32 => {
+            let (dst, _) = expect_write_register(iter, Some(aliases), assembly_mode)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (src, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            write_scalar_unary_op(bytes, &instruction_token, instruction_t, dst, src, assembly_mode)?;
+        },
+
         InstructionType::Cmp(comparison) => {
             let (dst, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
@@ -414,6 +404,12 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
             let (b, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             write_fcmp(bytes, instruction_token, dst, a, b, comparison, assembly_mode)?;
         },
+
+        InstructionType::Atan2  |
+        InstructionType::And    |
+        InstructionType::AndN   |
+        InstructionType::Or     |
+        InstructionType::Xor    |
         InstructionType::Add(_) |
         InstructionType::Sub(_) |
         InstructionType::Mul(_) |
@@ -426,16 +422,17 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
             let (b, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             write_scalar_binary_op(bytes, &instruction_token, instruction_t, dst, a, b, assembly_mode)?;
         },
-        InstructionType::Atan2 => todo!(),
-        InstructionType::And => todo!(),
-        InstructionType::AndN => todo!(),
-        InstructionType::Or => todo!(),
-        InstructionType::Xor => todo!(),
+        
         InstructionType::Fma(_) => todo!(),
         InstructionType::Lerp => todo!(),
-        InstructionType::Norm => todo!(),
-        InstructionType::Mag => todo!(),
+        InstructionType::Norm2 => todo!(),
+        InstructionType::Norm3 => todo!(),
+        InstructionType::Norm4 => todo!(),
+        InstructionType::Mag2 => todo!(),
+        InstructionType::Mag3 => todo!(),
+        InstructionType::Mag4 => todo!(),
         InstructionType::Cross => todo!(),
+
         InstructionType::MatrixMultiply4x4V4 => {
             let (dst, _) = expect_write_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
@@ -449,7 +446,7 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
             expect_token(TokenType::Comma, iter)?;
             let (x, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             write_mul_m44_v4(bytes, &instruction_token, dst, a0, a1, a2, a3, x, assembly_mode)?;
-        }
+        },
     }
     Ok(())
 }
