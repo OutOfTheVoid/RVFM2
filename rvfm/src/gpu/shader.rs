@@ -243,7 +243,7 @@ pub enum TextureLoadType {
 pub enum OpDataTypeConversion {
     F32ToI32,
     F32ToU32,
-    I32toF32,
+    I32ToF32,
     U32ToF32,
 }
 
@@ -1751,7 +1751,7 @@ impl ShadingUnitContext {
                     ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToI32) => |x: u32| f32::from_bits(x) as i32 as u32,
                     ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToU32) => |x: u32| f32::from_bits(x) as u32,
                     ScalarUnaryOp::Convert(OpDataTypeConversion::U32ToF32) => |x: u32| (x as f32).to_bits(),
-                    ScalarUnaryOp::Convert(OpDataTypeConversion::I32toF32) => |x: u32| (x as i32 as f32).to_bits(),
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::I32ToF32) => |x: u32| (x as i32 as f32).to_bits(),
                     ScalarUnaryOp::Negative(OpDataType::F32)               => |x: u32| (- f32::from_bits(x)).to_bits(),
                     ScalarUnaryOp::Negative(OpDataType::I32)               => |x: u32| (- (x as i32)) as u32,
                     ScalarUnaryOp::Sign(OpDataType::F32)                   => |x: u32| f32::from_bits(x).signum().to_bits(),
@@ -1822,7 +1822,7 @@ impl ShadingUnitContext {
                     ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToI32) => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]) as i32 as u32),
                     ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToU32) => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]) as u32),
                     ScalarUnaryOp::Convert(OpDataTypeConversion::U32ToF32) => |x: [u32; 4]| [0, 1, 2, 3].map(|c| (x[c] as f32).to_bits()),
-                    ScalarUnaryOp::Convert(OpDataTypeConversion::I32toF32) => |x: [u32; 4]| [0, 1, 2, 3].map(|c| (x[c] as i32 as f32).to_bits()),
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::I32ToF32) => |x: [u32; 4]| [0, 1, 2, 3].map(|c| (x[c] as i32 as f32).to_bits()),
                     ScalarUnaryOp::Negative(OpDataType::F32)               => |x: [u32; 4]| [0, 1, 2, 3].map(|c| (- f32::from_bits(x[c])).to_bits()),
                     ScalarUnaryOp::Negative(OpDataType::I32)               => |x: [u32; 4]| [0, 1, 2, 3].map(|c| (- (x[c] as i32)) as u32),
                     ScalarUnaryOp::Sign(OpDataType::F32)                   => |x: [u32; 4]| [0, 1, 2, 3].map(|c| f32::from_bits(x[c]).signum().to_bits()),
@@ -1922,7 +1922,7 @@ impl ShadingUnitContext {
                     ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToI32) => |x: u32| f32::from_bits(x) as i32 as u32,
                     ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToU32) => |x: u32| f32::from_bits(x) as u32,
                     ScalarUnaryOp::Convert(OpDataTypeConversion::U32ToF32) => |x: u32| (x as f32).to_bits(),
-                    ScalarUnaryOp::Convert(OpDataTypeConversion::I32toF32) => |x: u32| (x as i32 as f32).to_bits(),
+                    ScalarUnaryOp::Convert(OpDataTypeConversion::I32ToF32) => |x: u32| (x as i32 as f32).to_bits(),
                     ScalarUnaryOp::Negative(OpDataType::F32)               => |x: u32| (- f32::from_bits(x)).to_bits(),
                     ScalarUnaryOp::Negative(OpDataType::I32)               => |x: u32| (- (x as i32)) as u32,
                     ScalarUnaryOp::Sign(OpDataType::F32)                   => |x: u32| f32::from_bits(x).signum().to_bits(),

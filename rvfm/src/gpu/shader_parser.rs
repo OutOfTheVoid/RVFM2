@@ -11,6 +11,10 @@ pub enum ShaderParseError {
     InvalidComparison,
 }
 
+// ========================================================================== //
+// These should match the definitions in shader_assembler/src/instructions.rs //
+// ========================================================================== //
+
 const OPCODE_VECTOR_PUSH                          : u8 = 0x00;
 const OPCODE_SCALAR_PUSH                          : u8 = 0x01;
 const OPCODE_VECTOR_POP                           : u8 = 0x02;
@@ -52,6 +56,54 @@ const OPCODE_VECTOR_CW_SUB_I32                    : u8 = 0x23;
 const OPCODE_VECTOR_CW_MUL_I32                    : u8 = 0x24;
 const OPCODE_VECTOR_CW_DIV_I32                    : u8 = 0x25;
 const OPCODE_VECTOR_CW_MOD_I32                    : u8 = 0x26;
+
+const OPCODE_SCALAR_CONV_F32_TO_I32               : u8 = 0x27;
+const OPCODE_SCALAR_CONV_F32_TO_U32               : u8 = 0x28;
+const OPCODE_SCALAR_CONV_U32_TO_F32               : u8 = 0x29;
+const OPCODE_SCALAR_CONV_I32_TO_F32               : u8 = 0x2A;
+const OPCODE_SCALAR_NEG_F32                       : u8 = 0x2B;
+const OPCODE_SCALAR_NEG_I32                       : u8 = 0x2C;
+const OPCODE_SCALAR_SIGN_F32                      : u8 = 0x2D;
+const OPCODE_SCALAR_SIGN_I32                      : u8 = 0x2E;
+const OPCODE_SCALAR_RECIP                         : u8 = 0x2F;
+const OPCODE_SCALAR_SIN                           : u8 = 0x30;
+const OPCODE_SCALAR_COS                           : u8 = 0x31;
+const OPCODE_SCALAR_TAN                           : u8 = 0x32;
+const OPCODE_SCALAR_ASIN                          : u8 = 0x33;
+const OPCODE_SCALAR_ACOS                          : u8 = 0x34;
+const OPCODE_SCALAR_ATAN                          : u8 = 0x35;
+const OPCODE_SCALAR_LN                            : u8 = 0x36;
+const OPCODE_SCALAR_EXP                           : u8 = 0x37;
+
+const OPCODE_VECTOR_CW_CONV_F32_TO_I32               : u8 = 0x38;
+const OPCODE_VECTOR_CW_CONV_F32_TO_U32               : u8 = 0x39;
+const OPCODE_VECTOR_CW_CONV_U32_TO_F32               : u8 = 0x3A;
+const OPCODE_VECTOR_CW_CONV_I32_TO_F32               : u8 = 0x3B;
+const OPCODE_VECTOR_CW_NEG_F32                       : u8 = 0x3C;
+const OPCODE_VECTOR_CW_NEG_I32                       : u8 = 0x3D;
+const OPCODE_VECTOR_CW_SIGN_F32                      : u8 = 0x3E;
+const OPCODE_VECTOR_CW_SIGN_I32                      : u8 = 0x3F;
+const OPCODE_VECTOR_CW_RECIP                         : u8 = 0x40;
+const OPCODE_VECTOR_CW_SIN                           : u8 = 0x41;
+const OPCODE_VECTOR_CW_COS                           : u8 = 0x42;
+const OPCODE_VECTOR_CW_TAN                           : u8 = 0x43;
+const OPCODE_VECTOR_CW_ASIN                          : u8 = 0x44;
+const OPCODE_VECTOR_CW_ACOS                          : u8 = 0x45;
+const OPCODE_VECTOR_CW_ATAN                          : u8 = 0x46;
+const OPCODE_VECTOR_CW_LN                            : u8 = 0x47;
+const OPCODE_VECTOR_CW_EXP                           : u8 = 0x48;
+
+const OPCODE_SCALAR_ATAN2                            : u8 = 0x49;
+const OPCODE_SCALAR_AND                              : u8 = 0x4A;
+const OPCODE_SCALAR_AND_NOT                          : u8 = 0x4B;
+const OPCODE_SCALAR_OR                               : u8 = 0x4C;
+const OPCODE_SCALAR_XOR                              : u8 = 0x4D;
+
+const OPCODE_VECTOR_CW_ATAN2                         : u8 = 0x4E;
+const OPCODE_VECTOR_CW_AND                           : u8 = 0x4F;
+const OPCODE_VECTOR_CW_AND_NOT                       : u8 = 0x50;
+const OPCODE_VECTOR_CW_OR                            : u8 = 0x51;
+const OPCODE_VECTOR_CW_XOR                           : u8 = 0x52;
 
 pub fn get_byte(i: &mut usize, code: &[u8]) -> Result<u8, ShaderParseError> {
     if *i >= code.len() {
@@ -327,6 +379,98 @@ pub fn parse_shader_bytecode(shader_type: ShaderType, code: &[u8], module: &mut 
                     op
                 };
             },
+
+            OPCODE_SCALAR_CONV_F32_TO_I32 |
+            OPCODE_SCALAR_CONV_F32_TO_U32 |
+            OPCODE_SCALAR_CONV_I32_TO_F32 |
+            OPCODE_SCALAR_CONV_U32_TO_F32 |
+            OPCODE_SCALAR_NEG_I32         |
+            OPCODE_SCALAR_NEG_F32         |
+            OPCODE_SCALAR_SIGN_I32        |
+            OPCODE_SCALAR_SIGN_F32        |
+            OPCODE_SCALAR_RECIP           |
+            OPCODE_SCALAR_SIN             |
+            OPCODE_SCALAR_COS             |
+            OPCODE_SCALAR_TAN             |
+            OPCODE_SCALAR_ASIN            |
+            OPCODE_SCALAR_ACOS            |
+            OPCODE_SCALAR_ATAN            |
+            OPCODE_SCALAR_LN              |
+            OPCODE_SCALAR_EXP             => {
+                let dst = get_register::<Scalar>(&mut i, code)?;
+                let src = get_register::<Scalar>(&mut i, code)?;
+                let op = match opcode {
+                    OPCODE_SCALAR_CONV_F32_TO_I32 => ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToI32),
+                    OPCODE_SCALAR_CONV_F32_TO_U32 => ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToU32),
+                    OPCODE_SCALAR_CONV_I32_TO_F32 => ScalarUnaryOp::Convert(OpDataTypeConversion::I32ToF32),
+                    OPCODE_SCALAR_CONV_U32_TO_F32 => ScalarUnaryOp::Convert(OpDataTypeConversion::U32ToF32),
+                    OPCODE_SCALAR_NEG_I32         => ScalarUnaryOp::Negative (OpDataType::I32),
+                    OPCODE_SCALAR_NEG_F32         => ScalarUnaryOp::Negative (OpDataType::F32),
+                    OPCODE_SCALAR_SIGN_I32        => ScalarUnaryOp::Sign     (OpDataType::I32),
+                    OPCODE_SCALAR_SIGN_F32        => ScalarUnaryOp::Sign     (OpDataType::F32),
+                    OPCODE_SCALAR_RECIP           => ScalarUnaryOp::Reciporocal,
+                    OPCODE_SCALAR_SIN             => ScalarUnaryOp::Sin,
+                    OPCODE_SCALAR_COS             => ScalarUnaryOp::Cos,
+                    OPCODE_SCALAR_TAN             => ScalarUnaryOp::Tan,
+                    OPCODE_SCALAR_ASIN            => ScalarUnaryOp::ASin,
+                    OPCODE_SCALAR_ACOS            => ScalarUnaryOp::ACos,
+                    OPCODE_SCALAR_ATAN            => ScalarUnaryOp::Atan,
+                    OPCODE_SCALAR_LN              => ScalarUnaryOp::Ln,
+                    OPCODE_SCALAR_EXP             => ScalarUnaryOp::Exp,
+                    _ => unreachable!()
+                };
+                module.instruction_buffer[instruction] = ShaderInstruction::ScalarUnaryOp {
+                    src,
+                    dst,
+                    op
+                };
+            },
+
+            OPCODE_VECTOR_CW_CONV_F32_TO_I32 |
+            OPCODE_VECTOR_CW_CONV_F32_TO_U32 |
+            OPCODE_VECTOR_CW_CONV_I32_TO_F32 |
+            OPCODE_VECTOR_CW_CONV_U32_TO_F32 |
+            OPCODE_VECTOR_CW_NEG_I32         |
+            OPCODE_VECTOR_CW_NEG_F32         |
+            OPCODE_VECTOR_CW_SIGN_I32        |
+            OPCODE_VECTOR_CW_SIGN_F32        |
+            OPCODE_VECTOR_CW_RECIP           |
+            OPCODE_VECTOR_CW_SIN             |
+            OPCODE_VECTOR_CW_COS             |
+            OPCODE_VECTOR_CW_TAN             |
+            OPCODE_VECTOR_CW_ASIN            |
+            OPCODE_VECTOR_CW_ACOS            |
+            OPCODE_VECTOR_CW_ATAN            |
+            OPCODE_VECTOR_CW_LN              |
+            OPCODE_VECTOR_CW_EXP             => {
+                let dst = get_register::<Vector>(&mut i, code)?;
+                let src = get_register::<Vector>(&mut i, code)?;
+                let op = match opcode {
+                    OPCODE_VECTOR_CW_CONV_F32_TO_I32 => ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToI32),
+                    OPCODE_VECTOR_CW_CONV_F32_TO_U32 => ScalarUnaryOp::Convert(OpDataTypeConversion::F32ToU32),
+                    OPCODE_VECTOR_CW_CONV_I32_TO_F32 => ScalarUnaryOp::Convert(OpDataTypeConversion::I32ToF32),
+                    OPCODE_VECTOR_CW_CONV_U32_TO_F32 => ScalarUnaryOp::Convert(OpDataTypeConversion::U32ToF32),
+                    OPCODE_VECTOR_CW_NEG_I32         => ScalarUnaryOp::Negative (OpDataType::I32),
+                    OPCODE_VECTOR_CW_NEG_F32         => ScalarUnaryOp::Negative (OpDataType::F32),
+                    OPCODE_VECTOR_CW_SIGN_I32        => ScalarUnaryOp::Sign     (OpDataType::I32),
+                    OPCODE_VECTOR_CW_SIGN_F32        => ScalarUnaryOp::Sign     (OpDataType::F32),
+                    OPCODE_VECTOR_CW_RECIP           => ScalarUnaryOp::Reciporocal,
+                    OPCODE_VECTOR_CW_SIN             => ScalarUnaryOp::Sin,
+                    OPCODE_VECTOR_CW_COS             => ScalarUnaryOp::Cos,
+                    OPCODE_VECTOR_CW_TAN             => ScalarUnaryOp::Tan,
+                    OPCODE_VECTOR_CW_ASIN            => ScalarUnaryOp::ASin,
+                    OPCODE_VECTOR_CW_ACOS            => ScalarUnaryOp::ACos,
+                    OPCODE_VECTOR_CW_ATAN            => ScalarUnaryOp::Atan,
+                    OPCODE_VECTOR_CW_LN              => ScalarUnaryOp::Ln,
+                    OPCODE_VECTOR_CW_EXP             => ScalarUnaryOp::Exp,
+                    _ => unreachable!()
+                };
+                module.instruction_buffer[instruction] = ShaderInstruction::VectorComponentwiseScalarUnaryOp {
+                    src,
+                    dst,
+                    op
+                };
+            }
 
             _ => Err(ShaderParseError::UnknownOpcode)?
         }
