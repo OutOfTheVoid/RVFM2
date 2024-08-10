@@ -105,6 +105,16 @@ const OPCODE_VECTOR_CW_AND_NOT                       : u8 = 0x50;
 const OPCODE_VECTOR_CW_OR                            : u8 = 0x51;
 const OPCODE_VECTOR_CW_XOR                           : u8 = 0x52;
 
+const OPCODE_NORM2                                   : u8 = 0x53;
+const OPCODE_NORM3                                   : u8 = 0x54;
+const OPCODE_NORM4                                   : u8 = 0x55;
+const OPCODE_MAG2                                    : u8 = 0x56;
+const OPCODE_MAG3                                    : u8 = 0x57;
+const OPCODE_MAG4                                    : u8 = 0x58;
+const OPCODE_SQ_MAG2                                 : u8 = 0x59;
+const OPCODE_SQ_MAG3                                 : u8 = 0x5A;
+const OPCODE_SQ_MAG4                                 : u8 = 0x5B;
+
 pub fn get_byte(i: &mut usize, code: &[u8]) -> Result<u8, ShaderParseError> {
     if *i >= code.len() {
         Err(ShaderParseError::UnexpectedEndOfCode)
@@ -321,7 +331,12 @@ pub fn parse_shader_bytecode(shader_type: ShaderType, code: &[u8], module: &mut 
             OPCODE_SCALAR_SUB_I32 |  
             OPCODE_SCALAR_MUL_I32 |  
             OPCODE_SCALAR_DIV_I32 |  
-            OPCODE_SCALAR_MOD_I32 => {
+            OPCODE_SCALAR_MOD_I32 |
+            OPCODE_SCALAR_ATAN2   |
+			OPCODE_SCALAR_AND     |
+			OPCODE_SCALAR_AND_NOT |
+			OPCODE_SCALAR_OR      |
+			OPCODE_SCALAR_XOR     => {
                 let dst = get_register::<Scalar>(&mut i, code)?;
                 let src_a = get_register::<Scalar>(&mut i, code)?;
                 let src_b = get_register::<Scalar>(&mut i, code)?;
@@ -336,6 +351,11 @@ pub fn parse_shader_bytecode(shader_type: ShaderType, code: &[u8], module: &mut 
                     OPCODE_SCALAR_MUL_I32 => ScalarBinaryOp::Multiply(OpDataType::I32),
                     OPCODE_SCALAR_DIV_I32 => ScalarBinaryOp::Divide  (OpDataType::I32),
                     OPCODE_SCALAR_MOD_I32 => ScalarBinaryOp::Modulo  (OpDataType::I32),
+                    OPCODE_SCALAR_ATAN2   => ScalarBinaryOp::Atan2                    ,
+                    OPCODE_SCALAR_AND     => ScalarBinaryOp::And                      ,
+                    OPCODE_SCALAR_AND_NOT => ScalarBinaryOp::AndNot                   ,
+                    OPCODE_SCALAR_OR      => ScalarBinaryOp::Or                       ,
+                    OPCODE_SCALAR_XOR     => ScalarBinaryOp::Xor                      ,
                     _ => unreachable!()
                 };
                 module.instruction_buffer[instruction] = ShaderInstruction::ScalarBinaryOp {
@@ -355,7 +375,12 @@ pub fn parse_shader_bytecode(shader_type: ShaderType, code: &[u8], module: &mut 
             OPCODE_VECTOR_CW_SUB_I32 |  
             OPCODE_VECTOR_CW_MUL_I32 |  
             OPCODE_VECTOR_CW_DIV_I32 |  
-            OPCODE_VECTOR_CW_MOD_I32 => {
+            OPCODE_VECTOR_CW_MOD_I32 |
+			OPCODE_VECTOR_CW_ATAN2   |
+			OPCODE_VECTOR_CW_AND     |
+			OPCODE_VECTOR_CW_AND_NOT |
+			OPCODE_VECTOR_CW_OR      |
+			OPCODE_VECTOR_CW_XOR     => {
                 let dst = get_register::<Vector>(&mut i, code)?;
                 let src_a = get_register::<Vector>(&mut i, code)?;
                 let src_b = get_register::<Vector>(&mut i, code)?;
@@ -370,6 +395,11 @@ pub fn parse_shader_bytecode(shader_type: ShaderType, code: &[u8], module: &mut 
                     OPCODE_VECTOR_CW_MUL_I32 => ScalarBinaryOp::Multiply(OpDataType::I32),
                     OPCODE_VECTOR_CW_DIV_I32 => ScalarBinaryOp::Divide  (OpDataType::I32),
                     OPCODE_VECTOR_CW_MOD_I32 => ScalarBinaryOp::Modulo  (OpDataType::I32),
+                    OPCODE_VECTOR_CW_ATAN2   => ScalarBinaryOp::Atan2                    ,
+                    OPCODE_VECTOR_CW_AND     => ScalarBinaryOp::And                      ,
+                    OPCODE_VECTOR_CW_AND_NOT => ScalarBinaryOp::AndNot                   ,
+                    OPCODE_VECTOR_CW_OR      => ScalarBinaryOp::Or                       ,
+                    OPCODE_VECTOR_CW_XOR     => ScalarBinaryOp::Xor                      ,
                     _ => unreachable!()
                 };
                 module.instruction_buffer[instruction] = ShaderInstruction::VectorComponentwiseScalarBinaryOp {
@@ -470,7 +500,49 @@ pub fn parse_shader_bytecode(shader_type: ShaderType, code: &[u8], module: &mut 
                     dst,
                     op
                 };
-            }
+            },
+
+            OPCODE_MAG2 |
+            OPCODE_MAG3 |
+            OPCODE_MAG4 |
+            OPCODE_SQ_MAG2 |
+            OPCODE_SQ_MAG3 |
+            OPCODE_SQ_MAG4 => {
+                let dst = get_register::<Scalar>(&mut i, code)?;
+                let src = get_register::<Vector>(&mut i, code)?;
+                let op = match opcode {
+                    OPCODE_MAG2    => VectorToScalarUnaryOp::Magnitude2,
+                    OPCODE_MAG3    => VectorToScalarUnaryOp::Magnitude3,
+                    OPCODE_MAG4    => VectorToScalarUnaryOp::Magnitude4,
+                    OPCODE_SQ_MAG2 => VectorToScalarUnaryOp::SquareMagnitude2,
+                    OPCODE_SQ_MAG3 => VectorToScalarUnaryOp::SquareMagnitude3,
+                    OPCODE_SQ_MAG4 => VectorToScalarUnaryOp::SquareMagnitude4,
+                    _ => unreachable!()
+                };
+                module.instruction_buffer[instruction] = ShaderInstruction::VectorToScalarUnaryOp {
+                    src,
+                    dst,
+                    op
+                };
+            },
+
+            OPCODE_NORM2 |
+            OPCODE_NORM3 |
+            OPCODE_NORM4 => {
+                let dst = get_register::<Vector>(&mut i, code)?;
+                let src = get_register::<Vector>(&mut i, code)?;
+                let op = match opcode {
+                    OPCODE_NORM2 => VectorToVectorUnaryOp::Normalize2,
+                    OPCODE_NORM3 => VectorToVectorUnaryOp::Normalize3,
+                    OPCODE_NORM4 => VectorToVectorUnaryOp::Normalize4,
+                    _ => unreachable!()
+                };
+                module.instruction_buffer[instruction] = ShaderInstruction::VectorToVectorUnaryOp {
+                    src,
+                    dst,
+                    op
+                };
+            },
 
             _ => Err(ShaderParseError::UnknownOpcode)?
         }

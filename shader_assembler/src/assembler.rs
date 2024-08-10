@@ -373,11 +373,20 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
         InstructionType::ConvertF32ToI32 |
         InstructionType::ConvertF32ToU32 | 
         InstructionType::ConvertI32ToF32 |
-        InstructionType::ConvertU32ToF32 => {
+        InstructionType::ConvertU32ToF32 |
+        InstructionType::Norm2           |
+        InstructionType::Norm3           |
+        InstructionType::Norm4           |
+        InstructionType::Mag2            |
+        InstructionType::Mag3            |
+        InstructionType::Mag4            |
+        InstructionType::SqMag2          |
+        InstructionType::SqMag3          |
+        InstructionType::SqMag4          => {
             let (dst, _) = expect_write_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
             let (src, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
-            write_scalar_unary_op(bytes, &instruction_token, instruction_t, dst, src, assembly_mode)?;
+            write_unary_op(bytes, &instruction_token, instruction_t, dst, src, assembly_mode)?;
         },
 
         InstructionType::Cmp(comparison) => {
@@ -414,24 +423,27 @@ fn handle_instruction<'t, I: Iterator<Item = &'t Token>>(bytes: &mut Vec<u8>, in
         InstructionType::Sub(_) |
         InstructionType::Mul(_) |
         InstructionType::Div(_) |
-        InstructionType::Mod(_) => {
+        InstructionType::Mod(_) |
+        InstructionType::Cross => {
             let (dst, _) = expect_write_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
             let (a, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
             expect_token(TokenType::Comma, iter)?;
             let (b, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
-            write_scalar_binary_op(bytes, &instruction_token, instruction_t, dst, a, b, assembly_mode)?;
+            write_binary_op(bytes, &instruction_token, instruction_t, dst, a, b, assembly_mode)?;
         },
         
-        InstructionType::Fma(_) => todo!(),
-        InstructionType::Lerp => todo!(),
-        InstructionType::Norm2 => todo!(),
-        InstructionType::Norm3 => todo!(),
-        InstructionType::Norm4 => todo!(),
-        InstructionType::Mag2 => todo!(),
-        InstructionType::Mag3 => todo!(),
-        InstructionType::Mag4 => todo!(),
-        InstructionType::Cross => todo!(),
+        InstructionType::Lerp |
+        InstructionType::Fma(_) => {
+            let (dst, _) = expect_write_register(iter, Some(aliases), assembly_mode)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (a, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (b, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            expect_token(TokenType::Comma, iter)?;
+            let (c, _) = expect_read_register(iter, Some(aliases), assembly_mode)?;
+            write_ternary_op(bytes, &instruction_token, instruction_t, dst, a, b, c, assembly_mode)?;
+        },
 
         InstructionType::MatrixMultiply4x4V4 => {
             let (dst, _) = expect_write_register(iter, Some(aliases), assembly_mode)?;

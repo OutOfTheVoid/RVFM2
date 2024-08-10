@@ -313,6 +313,12 @@ pub enum ScalarTernaryOp {
 
 #[allow(unused)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum VectorVectorScalarToVectorTernaryOp {
+    Lerp,
+}
+
+#[allow(unused)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VectorToVectorUnaryOp {
     Normalize2,
     Normalize3,
@@ -325,11 +331,14 @@ pub enum VectorToScalarUnaryOp {
     Magnitude2,
     Magnitude3,
     Magnitude4,
+    SquareMagnitude2,
+    SquareMagnitude3,
+    SquareMagnitude4,
 }
 
 #[allow(unused)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum VectorToVectorBinaryOp {
+pub enum VectorBinaryOp {
     CrossProduct,
 }
 
@@ -508,6 +517,19 @@ pub enum ShaderInstruction {
         src: RegisterAddress<Vector>,
         dst: RegisterAddress<Scalar>,
         op: VectorToScalarUnaryOp
+    },
+    VectorBinaryOp {
+        src_a: RegisterAddress<Vector>,
+        src_b: RegisterAddress<Vector>,
+        dst: RegisterAddress<Vector>,
+        op: VectorBinaryOp
+    },
+    VectorVectorScalarToVectorTernaryOp {
+        src_a: RegisterAddress<Vector>,
+        src_b: RegisterAddress<Vector>,
+        src_c: RegisterAddress<Scalar>,
+        dst:   RegisterAddress<Vector>,
+        op: VectorVectorScalarToVectorTernaryOp,
     },
     MatrixMultiply4x4V4 {
         a0: RegisterAddress<Vector>,
@@ -1915,6 +1937,37 @@ impl ShadingUnitContext {
                     to_register[i] = op_fn(from_a, from_b, from_c);
                 }
             },
+            ShaderInstruction::VectorVectorScalarToVectorTernaryOp { src_a, src_b, src_c, dst, op } => {
+                let from_a_register = self.read_vector_register(*src_a, run_context);
+                let from_b_register = self.read_vector_register(*src_b, run_context);
+                let from_c_register = self.read_scalar_register(*src_c, run_context);
+                let to_register = self.write_vector_register(*dst, run_context)?;
+                let op_fn = match op {
+                    VectorVectorScalarToVectorTernaryOp::Lerp => |a: [u32; 4], b: [u32; 4], c: u32| {
+                        let t = f32::from_bits(c);
+                        let inv_t = 1.0 - t;
+                        [0, 1, 2, 3].map(|c| (f32::from_bits(a[c]) * inv_t + f32::from_bits(b[c]) * t).to_bits())
+                    }
+                };
+                match (from_a_register, from_b_register, from_c_register) {
+                    (RegisterRead::Core(reg_a_list), RegisterRead::Core(reg_b_list), RegisterRead::Core(reg_c_list)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(reg_a_list[i], reg_b_list[i], reg_c_list[i])),
+                    (RegisterRead::Core(reg_a_list), RegisterRead::Core(reg_b_list), RegisterRead::Uniform(reg_c)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(reg_a_list[i], reg_b_list[i], *reg_c)),
+                    (RegisterRead::Core(reg_a_list), RegisterRead::Uniform(reg_b), RegisterRead::Core(reg_c_list)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(reg_a_list[i], *reg_b, reg_c_list[i])),
+                    (RegisterRead::Core(reg_a_list), RegisterRead::Uniform(reg_b), RegisterRead::Uniform(reg_c)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(reg_a_list[i], *reg_b, *reg_c)),
+                    (RegisterRead::Uniform(reg_a), RegisterRead::Core(reg_b_list), RegisterRead::Core(reg_c_list)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(*reg_a, reg_b_list[i], reg_c_list[i])),
+                    (RegisterRead::Uniform(reg_a), RegisterRead::Core(reg_b_list), RegisterRead::Uniform(reg_c)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(*reg_a, reg_b_list[i], *reg_c)),
+                    (RegisterRead::Uniform(reg_a), RegisterRead::Uniform(reg_b), RegisterRead::Core(reg_c_list)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(*reg_a, *reg_b, reg_c_list[i])),
+                    (RegisterRead::Uniform(reg_a), RegisterRead::Uniform(reg_b), RegisterRead::Uniform(reg_c)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(*reg_a, *reg_b, *reg_c)),
+                }
+            }
             ShaderInstruction::VectorComponentwiseScalarUnaryOpMasked { src, dst, op, mask } => {
                 let from_register = self.read_vector_register(*src, run_context);
                 let to_register = self.write_vector_register(*dst, run_context)?;
@@ -1990,6 +2043,119 @@ impl ShadingUnitContext {
                         dot_product(a3, x),
                     ];
                     dest_reg[i] = value.map(|x| x.to_bits());
+                }
+            },
+            ShaderInstruction::VectorToVectorUnaryOp { src, dst, op } => {
+                let from_register = self.read_vector_register(*src, run_context);
+                let to_register = self.write_vector_register(*dst, run_context)?;
+                let op_fn = match op {
+                    VectorToVectorUnaryOp::Normalize2 => |v: [u32; 4]| {
+                        let x = f32::from_bits(v[0]);
+                        let y = f32::from_bits(v[1]);
+                        let mag = (x * x + y * y).sqrt();
+                        let recip_mag = 1.0 / mag;
+                        [(x * recip_mag).to_bits(), (y * recip_mag).to_bits(), 0, 0]
+                    },
+                    VectorToVectorUnaryOp::Normalize3 => |v: [u32; 4]| {
+                        let x = f32::from_bits(v[0]);
+                        let y = f32::from_bits(v[1]);
+                        let z = f32::from_bits(v[2]);
+                        let mag = (x * x + y * y + z * z).sqrt();
+                        let recip_mag = 1.0 / mag;
+                        [(x * recip_mag).to_bits(), (y * recip_mag).to_bits(), (z * recip_mag).to_bits(), 0]
+                    },
+                    VectorToVectorUnaryOp::Normalize4 => |v: [u32; 4]| {
+                        let x = f32::from_bits(v[0]);
+                        let y = f32::from_bits(v[1]);
+                        let z = f32::from_bits(v[2]);
+                        let w = f32::from_bits(v[3]);
+                        let mag = (x * x + y * y + z * z + w * w).sqrt();
+                        let recip_mag = 1.0 / mag;
+                        [(x * recip_mag).to_bits(), (y * recip_mag).to_bits(), (z * recip_mag).to_bits(), (z * recip_mag).to_bits()]
+                    },
+                };
+                match from_register {
+                    RegisterRead::Core(from_reg_list) => (0..n).for_each(|i| to_register[i] = op_fn(from_reg_list[i])),
+                    RegisterRead::Uniform(from_reg) => (0..n).for_each(|i| to_register[i] = op_fn(*from_reg)),
+                }
+            },
+            ShaderInstruction::VectorToScalarUnaryOp { src, dst, op } => {
+                let from_register = self.read_vector_register(*src, run_context);
+                let to_register = self.write_scalar_register(*dst, run_context)?;
+                let op_fn = match op {
+                    &VectorToScalarUnaryOp::Magnitude2 => |v: [u32; 4]| {
+                        let x = f32::from_bits(v[0]);
+                        let y = f32::from_bits(v[1]);
+                        let mag = (x * x + y * y).sqrt();
+                        mag.to_bits()
+                    },
+                    VectorToScalarUnaryOp::Magnitude3 => |v: [u32; 4]| {
+                        let x = f32::from_bits(v[0]);
+                        let y = f32::from_bits(v[1]);
+                        let z = f32::from_bits(v[2]);
+                        let mag = (x * x + y * y + z * z).sqrt();
+                        mag.to_bits()
+                    },
+                    VectorToScalarUnaryOp::Magnitude4 => |v: [u32; 4]| {
+                        let x = f32::from_bits(v[0]);
+                        let y = f32::from_bits(v[1]);
+                        let z = f32::from_bits(v[2]);
+                        let w = f32::from_bits(v[3]);
+                        let mag = (x * x + y * y + z * z + w * w).sqrt();
+                        mag.to_bits()
+                    },
+                    &VectorToScalarUnaryOp::SquareMagnitude2 => |v: [u32; 4]| {
+                        let x = f32::from_bits(v[0]);
+                        let y = f32::from_bits(v[1]);
+                        let square_mag = x * x + y * y;
+                        square_mag.to_bits()
+                    },
+                    VectorToScalarUnaryOp::SquareMagnitude3 => |v: [u32; 4]| {
+                        let x = f32::from_bits(v[0]);
+                        let y = f32::from_bits(v[1]);
+                        let z = f32::from_bits(v[2]);
+                        let square_mag = x * x + y * y + z * z;
+                        square_mag.to_bits()
+                    },
+                    VectorToScalarUnaryOp::SquareMagnitude4 => |v: [u32; 4]| {
+                        let x = f32::from_bits(v[0]);
+                        let y = f32::from_bits(v[1]);
+                        let z = f32::from_bits(v[2]);
+                        let w = f32::from_bits(v[3]);
+                        let square_mag = x * x + y * y + z * z + w * w;
+                        square_mag.to_bits()
+                    },
+                };
+                match from_register {
+                    RegisterRead::Core(from_reg_list) => (0..n).for_each(|i| to_register[i] = op_fn(from_reg_list[i])),
+                    RegisterRead::Uniform(from_reg) => (0..n).for_each(|i| to_register[i] = op_fn(*from_reg)),
+                }
+            },
+            ShaderInstruction::VectorBinaryOp { src_a, src_b, dst, op } => {
+                let from_a_register = self.read_vector_register(*src_a, run_context);
+                let from_b_register = self.read_vector_register(*src_b, run_context);
+                let to_register = self.write_vector_register(*dst, run_context)?;
+                let op_fn = match op {
+                    VectorBinaryOp::CrossProduct => |a: [u32; 4], b: [u32; 4]| {
+                        let a = [0, 1, 2].map(|c| f32::from_bits(a[c]));
+                        let b = [0, 1, 2].map(|c| f32::from_bits(b[c]));
+                        [
+                            (a[1] * b[2] - a[2] * b[1]).to_bits(),
+                            (a[2] * b[0] - a[0] * b[2]).to_bits(),
+                            (a[0] * b[1] - a[1] * b[0]).to_bits(),
+                            0
+                        ]
+                    },
+                };
+                match (from_a_register, from_b_register) {
+                    (RegisterRead::Core(from_a_list), RegisterRead::Core(from_b_list)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(from_a_list[i], from_b_list[i])),
+                    (RegisterRead::Core(from_a_list), RegisterRead::Uniform(from_b)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(from_a_list[i], *from_b)),
+                    (RegisterRead::Uniform(from_a), RegisterRead::Core(from_b_list)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(*from_a, from_b_list[i])),
+                    (RegisterRead::Uniform(from_a), RegisterRead::Uniform(from_b)) => 
+                        (0..n).for_each(|i| to_register[i] = op_fn(*from_a, *from_b)),
                 }
             },
             _ => panic!("GPU: Unimplemented shader instruction: {:?}", instruction),

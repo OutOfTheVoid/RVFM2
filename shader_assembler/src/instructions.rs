@@ -140,6 +140,18 @@ const OPCODE_VECTOR_CW_AND_NOT                       : u8 = 0x50;
 const OPCODE_VECTOR_CW_OR                            : u8 = 0x51;
 const OPCODE_VECTOR_CW_XOR                           : u8 = 0x52;
 
+const OPCODE_NORM2                                   : u8 = 0x53;
+const OPCODE_NORM3                                   : u8 = 0x54;
+const OPCODE_NORM4                                   : u8 = 0x55;
+const OPCODE_MAG2                                    : u8 = 0x56;
+const OPCODE_MAG3                                    : u8 = 0x57;
+const OPCODE_MAG4                                    : u8 = 0x58;
+const OPCODE_SQ_MAG2                                 : u8 = 0x59;
+const OPCODE_SQ_MAG3                                 : u8 = 0x5A;
+const OPCODE_SQ_MAG4                                 : u8 = 0x5B;
+
+const OPCODE_CROSS                                   : u8 = 0x5C;
+
 pub fn write_push(bytes: &mut Vec<u8>, src: RegisterName, _src_token: &Token, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
     bytes.push(if src.is_vector() { OPCODE_VECTOR_PUSH } else { OPCODE_SCALAR_PUSH });
     src.write(bytes, assembly_mode);
@@ -441,62 +453,68 @@ pub fn write_mul_m44_v4(bytes: &mut Vec<u8>, mul_token: &Token, dst: RegisterNam
     Ok(())
 }
 
-pub fn write_scalar_binary_op(bytes: &mut Vec<u8>, op_token: &Token, op: InstructionType, dst: RegisterName, a: RegisterName, b: RegisterName, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
-    let vector = match (dst.is_vector(), a.is_vector(), b.is_vector()) {
-        (true, true, true) => true,
-        (false, false, false) => false,
-        _ => {
+pub fn write_binary_op(bytes: &mut Vec<u8>, op_token: &Token, op: InstructionType, dst: RegisterName, a: RegisterName, b: RegisterName, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
+    let operand_types = (dst.is_vector(), a.is_vector(), b.is_vector());
+    const OT_ALL_SCALAR: (bool, bool, bool) = (true, true, true);
+    const OT_ALL_VECTOR: (bool, bool, bool) = (false, false, false);
+    let opcode = match (op, operand_types) {
+        (InstructionType::Add(OpDataType::F32), OT_ALL_SCALAR) => OPCODE_SCALAR_ADD_F32,
+        (InstructionType::Add(OpDataType::I32), OT_ALL_SCALAR) => OPCODE_SCALAR_ADD_I32,
+        (InstructionType::Add(OpDataType::F32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_ADD_F32,
+        (InstructionType::Add(OpDataType::I32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_ADD_I32,
+
+        (InstructionType::Sub(OpDataType::F32), OT_ALL_SCALAR) => OPCODE_SCALAR_SUB_F32,
+        (InstructionType::Sub(OpDataType::I32), OT_ALL_SCALAR) => OPCODE_SCALAR_SUB_I32,
+        (InstructionType::Sub(OpDataType::F32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_SUB_F32,
+        (InstructionType::Sub(OpDataType::I32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_SUB_I32,
+
+        (InstructionType::Mul(OpDataType::F32), OT_ALL_SCALAR) => OPCODE_SCALAR_MUL_F32,
+        (InstructionType::Mul(OpDataType::I32), OT_ALL_SCALAR) => OPCODE_SCALAR_MUL_I32,
+        (InstructionType::Mul(OpDataType::F32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_MUL_F32,
+        (InstructionType::Mul(OpDataType::I32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_MUL_I32,
+
+        (InstructionType::Div(OpDataType::F32), OT_ALL_SCALAR) => OPCODE_SCALAR_DIV_F32,
+        (InstructionType::Div(OpDataType::I32), OT_ALL_SCALAR) => OPCODE_SCALAR_DIV_I32,
+        (InstructionType::Div(OpDataType::F32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_DIV_F32,
+        (InstructionType::Div(OpDataType::I32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_DIV_I32,
+
+        (InstructionType::Mod(OpDataType::F32), OT_ALL_SCALAR) => OPCODE_SCALAR_MOD_F32,
+        (InstructionType::Mod(OpDataType::I32), OT_ALL_SCALAR) => OPCODE_SCALAR_MOD_I32,
+        (InstructionType::Mod(OpDataType::F32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_MOD_F32,
+        (InstructionType::Mod(OpDataType::I32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_MOD_I32,
+
+        (InstructionType::Atan2,                OT_ALL_SCALAR) => OPCODE_SCALAR_ATAN2,
+        (InstructionType::Atan2,                OT_ALL_VECTOR) => OPCODE_VECTOR_CW_ATAN2,
+
+        (InstructionType::And,                  OT_ALL_SCALAR) => OPCODE_SCALAR_AND,
+        (InstructionType::AndN,                 OT_ALL_SCALAR) => OPCODE_SCALAR_AND_NOT,
+        (InstructionType::Or,                   OT_ALL_SCALAR) => OPCODE_SCALAR_OR,
+        (InstructionType::Xor,                  OT_ALL_SCALAR) => OPCODE_SCALAR_XOR,
+
+        (InstructionType::And,                  OT_ALL_VECTOR) => OPCODE_VECTOR_CW_AND,
+        (InstructionType::AndN,                 OT_ALL_VECTOR) => OPCODE_VECTOR_CW_AND_NOT,
+        (InstructionType::Or,                   OT_ALL_VECTOR) => OPCODE_VECTOR_CW_OR,
+        (InstructionType::Xor,                  OT_ALL_VECTOR) => OPCODE_VECTOR_CW_XOR,
+
+        (InstructionType::Cross,                OT_ALL_VECTOR) => OPCODE_CROSS,
+
+        (InstructionType::Add(_),               _            ) |
+        (InstructionType::Sub(_),               _            ) |
+        (InstructionType::Div(_),               _            ) |
+        (InstructionType::Mul(_),               _            ) |
+        (InstructionType::Mod(_),               _            ) |
+        (InstructionType::Atan2,                _            ) |
+        (InstructionType::And,                  _            ) |
+        (InstructionType::Or,                   _            ) |
+        (InstructionType::Xor,                  _            ) |
+        (InstructionType::AndN,                 _            ) |
+        (InstructionType::Cross,                _            ) => {
             Err(SourceError {
-                message: format!(
-                    "Invalid operand types - dst: {}, a: {}, b: {}",
-                    bool_to_type_name(dst.is_vector()),
-                    bool_to_type_name(a.is_vector()),
-                    bool_to_type_name(b.is_vector())
-                ),
+                message: format!("Invalid operand types for instruction: {:?}: {}, {}, {}", op, bool_to_type_name(dst.is_vector()), bool_to_type_name(a.is_vector()), bool_to_type_name(b.is_vector())),
                 line: op_token.line,
                 column: op_token.column,
             })?
-        }
-    };
-    let opcode = match (op, vector) {
-        (InstructionType::Add(OpDataType::F32), false ) => OPCODE_SCALAR_ADD_F32,
-        (InstructionType::Add(OpDataType::I32), false ) => OPCODE_SCALAR_ADD_I32,
-        (InstructionType::Add(OpDataType::F32), true  ) => OPCODE_VECTOR_CW_ADD_F32,
-        (InstructionType::Add(OpDataType::I32), true  ) => OPCODE_VECTOR_CW_ADD_I32,
-
-        (InstructionType::Sub(OpDataType::F32), false ) => OPCODE_SCALAR_SUB_F32,
-        (InstructionType::Sub(OpDataType::I32), false ) => OPCODE_SCALAR_SUB_I32,
-        (InstructionType::Sub(OpDataType::F32), true  ) => OPCODE_VECTOR_CW_SUB_F32,
-        (InstructionType::Sub(OpDataType::I32), true  ) => OPCODE_VECTOR_CW_SUB_I32,
-
-        (InstructionType::Mul(OpDataType::F32), false ) => OPCODE_SCALAR_MUL_F32,
-        (InstructionType::Mul(OpDataType::I32), false ) => OPCODE_SCALAR_MUL_I32,
-        (InstructionType::Mul(OpDataType::F32), true  ) => OPCODE_VECTOR_CW_MUL_F32,
-        (InstructionType::Mul(OpDataType::I32), true  ) => OPCODE_VECTOR_CW_MUL_I32,
-
-        (InstructionType::Div(OpDataType::F32), false ) => OPCODE_SCALAR_DIV_F32,
-        (InstructionType::Div(OpDataType::I32), false ) => OPCODE_SCALAR_DIV_I32,
-        (InstructionType::Div(OpDataType::F32), true  ) => OPCODE_VECTOR_CW_DIV_F32,
-        (InstructionType::Div(OpDataType::I32), true  ) => OPCODE_VECTOR_CW_DIV_I32,
-
-        (InstructionType::Mod(OpDataType::F32), false ) => OPCODE_SCALAR_MOD_F32,
-        (InstructionType::Mod(OpDataType::I32), false ) => OPCODE_SCALAR_MOD_I32,
-        (InstructionType::Mod(OpDataType::F32), true  ) => OPCODE_VECTOR_CW_MOD_F32,
-        (InstructionType::Mod(OpDataType::I32), true  ) => OPCODE_VECTOR_CW_MOD_I32,
-
-        (InstructionType::Atan2,                false ) => OPCODE_SCALAR_ATAN2,
-        (InstructionType::Atan2,                true  ) => OPCODE_VECTOR_CW_ATAN2,
-
-        (InstructionType::And,                  false ) => OPCODE_SCALAR_AND,
-        (InstructionType::AndN,                 false ) => OPCODE_SCALAR_AND_NOT,
-        (InstructionType::Or,                   false ) => OPCODE_SCALAR_OR,
-        (InstructionType::Xor,                  false ) => OPCODE_SCALAR_XOR,
-
-        (InstructionType::And,                  true  ) => OPCODE_VECTOR_CW_AND,
-        (InstructionType::AndN,                 true  ) => OPCODE_VECTOR_CW_AND_NOT,
-        (InstructionType::Or,                   true  ) => OPCODE_VECTOR_CW_OR,
-        (InstructionType::Xor,                  true  ) => OPCODE_VECTOR_CW_XOR,
-
+        },
         _ => panic!("Invalid InstructionType passed to write_scalar_binary_op() (internal error)"),
     };
     bytes.push(opcode);
@@ -506,65 +524,133 @@ pub fn write_scalar_binary_op(bytes: &mut Vec<u8>, op_token: &Token, op: Instruc
     Ok(())
 }
 
-pub fn write_scalar_unary_op(bytes: &mut Vec<u8>, op_token: &Token, op: InstructionType, dst: RegisterName, src: RegisterName, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
-    let vector = match (dst.is_vector(), src.is_vector()) {
-        (true, true) => true,
-        (false, false) => false,
-        _ => {
+pub fn write_unary_op(bytes: &mut Vec<u8>, op_token: &Token, op: InstructionType, dst: RegisterName, src: RegisterName, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
+    let operand_types = (dst.is_vector(), src.is_vector());
+    const OT_ALL_SCALAR: (bool, bool) = (false, false);
+    const OT_ALL_VECTOR: (bool, bool) = (true,  true );
+    const OT_VEC_TO_SCL: (bool, bool) = (false, true );
+    let opcode = match (op, operand_types) {
+        (InstructionType::ConvertF32ToI32,       OT_ALL_SCALAR) => OPCODE_SCALAR_CONV_F32_TO_I32,
+        (InstructionType::ConvertF32ToU32,       OT_ALL_SCALAR) => OPCODE_SCALAR_CONV_F32_TO_U32,
+        (InstructionType::ConvertI32ToF32,       OT_ALL_SCALAR) => OPCODE_SCALAR_CONV_I32_TO_F32,
+        (InstructionType::ConvertU32ToF32,       OT_ALL_SCALAR) => OPCODE_SCALAR_CONV_U32_TO_F32,
+        (InstructionType::ConvertF32ToI32,       OT_ALL_VECTOR) => OPCODE_VECTOR_CW_CONV_F32_TO_I32,
+        (InstructionType::ConvertF32ToU32,       OT_ALL_VECTOR) => OPCODE_VECTOR_CW_CONV_F32_TO_U32,
+        (InstructionType::ConvertI32ToF32,       OT_ALL_VECTOR) => OPCODE_VECTOR_CW_CONV_I32_TO_F32,
+        (InstructionType::ConvertU32ToF32,       OT_ALL_VECTOR) => OPCODE_VECTOR_CW_CONV_U32_TO_F32,
+
+        (InstructionType::Neg(OpDataType::F32),  OT_ALL_SCALAR) => OPCODE_SCALAR_NEG_F32,
+        (InstructionType::Neg(OpDataType::I32),  OT_ALL_SCALAR) => OPCODE_SCALAR_NEG_I32,
+        (InstructionType::Neg(OpDataType::F32),  OT_ALL_VECTOR) => OPCODE_VECTOR_CW_NEG_F32,
+        (InstructionType::Neg(OpDataType::I32),  OT_ALL_VECTOR) => OPCODE_VECTOR_CW_NEG_I32,
+
+        (InstructionType::Sign(OpDataType::F32), OT_ALL_SCALAR) => OPCODE_SCALAR_SIGN_F32,
+        (InstructionType::Sign(OpDataType::I32), OT_ALL_SCALAR) => OPCODE_SCALAR_SIGN_I32,
+        (InstructionType::Sign(OpDataType::F32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_SIGN_F32,
+        (InstructionType::Sign(OpDataType::I32), OT_ALL_VECTOR) => OPCODE_VECTOR_CW_SIGN_I32,
+
+        (InstructionType::Recip,                 OT_ALL_SCALAR) => OPCODE_SCALAR_RECIP,
+        (InstructionType::Sin,                   OT_ALL_SCALAR) => OPCODE_SCALAR_SIN,
+        (InstructionType::Cos,                   OT_ALL_SCALAR) => OPCODE_SCALAR_COS,
+        (InstructionType::Tan,                   OT_ALL_SCALAR) => OPCODE_SCALAR_TAN,
+        (InstructionType::ASin,                  OT_ALL_SCALAR) => OPCODE_SCALAR_ASIN,
+        (InstructionType::ACos,                  OT_ALL_SCALAR) => OPCODE_SCALAR_ACOS,
+        (InstructionType::Atan,                  OT_ALL_SCALAR) => OPCODE_SCALAR_ATAN,
+        (InstructionType::Ln,                    OT_ALL_SCALAR) => OPCODE_SCALAR_LN,
+        (InstructionType::Exp,                   OT_ALL_SCALAR) => OPCODE_SCALAR_EXP,
+
+        (InstructionType::Recip,                 OT_ALL_VECTOR) => OPCODE_VECTOR_CW_RECIP,
+        (InstructionType::Sin,                   OT_ALL_VECTOR) => OPCODE_VECTOR_CW_SIN,
+        (InstructionType::Cos,                   OT_ALL_VECTOR) => OPCODE_VECTOR_CW_COS,
+        (InstructionType::Tan,                   OT_ALL_VECTOR) => OPCODE_VECTOR_CW_TAN,
+        (InstructionType::ASin,                  OT_ALL_VECTOR) => OPCODE_VECTOR_CW_ASIN,
+        (InstructionType::ACos,                  OT_ALL_VECTOR) => OPCODE_VECTOR_CW_ACOS,
+        (InstructionType::Atan,                  OT_ALL_VECTOR) => OPCODE_VECTOR_CW_ATAN,
+        (InstructionType::Ln,                    OT_ALL_VECTOR) => OPCODE_VECTOR_CW_LN,
+        (InstructionType::Exp,                   OT_ALL_VECTOR) => OPCODE_VECTOR_CW_EXP,
+
+        (InstructionType::Norm2,                 OT_ALL_VECTOR) => OPCODE_NORM2,
+        (InstructionType::Norm3,                 OT_ALL_VECTOR) => OPCODE_NORM3,
+        (InstructionType::Norm4,                 OT_ALL_VECTOR) => OPCODE_NORM4,
+
+        (InstructionType::Mag2,                  OT_VEC_TO_SCL) => OPCODE_MAG2,
+        (InstructionType::Mag3,                  OT_VEC_TO_SCL) => OPCODE_MAG3,
+        (InstructionType::Mag4,                  OT_VEC_TO_SCL) => OPCODE_MAG4,
+        (InstructionType::SqMag2,                OT_VEC_TO_SCL) => OPCODE_SQ_MAG2,
+        (InstructionType::SqMag3,                OT_VEC_TO_SCL) => OPCODE_SQ_MAG3,
+        (InstructionType::SqMag4,                OT_VEC_TO_SCL) => OPCODE_SQ_MAG4,
+
+        (InstructionType::ConvertF32ToI32,       _            ) |
+        (InstructionType::ConvertF32ToU32,       _            ) |
+        (InstructionType::ConvertI32ToF32,       _            ) |
+        (InstructionType::ConvertU32ToF32,       _            ) |
+        (InstructionType::Neg(OpDataType::F32),  _            ) |
+        (InstructionType::Neg(OpDataType::I32),  _            ) |
+        (InstructionType::Sign(OpDataType::F32), _            ) |
+        (InstructionType::Sign(OpDataType::I32), _            ) |
+        (InstructionType::Recip,                 _            ) |
+        (InstructionType::Sin,                   _            ) |
+        (InstructionType::Cos,                   _            ) |
+        (InstructionType::Tan,                   _            ) |
+        (InstructionType::ASin,                  _            ) |
+        (InstructionType::ACos,                  _            ) |
+        (InstructionType::Atan,                  _            ) |
+        (InstructionType::Ln,                    _            ) |
+        (InstructionType::Exp,                   _            ) |
+        (InstructionType::Norm2,                 _            ) |
+        (InstructionType::Norm3,                 _            ) |
+        (InstructionType::Norm4,                 _            ) |
+        (InstructionType::Mag2,                  _            ) |
+        (InstructionType::Mag3,                  _            ) |
+        (InstructionType::Mag4,                  _            ) |
+        (InstructionType::SqMag2,                _            ) |
+        (InstructionType::SqMag3,                _            ) |
+        (InstructionType::SqMag4,                _            ) => {
             Err(SourceError {
-                message: format!(
-                    "Invalid operand types - dst: {}, src: {}",
-                    bool_to_type_name(dst.is_vector()),
-                    bool_to_type_name(src.is_vector()),
-                ),
+                message: format!("Invalid operand types for instruction: {:?}: {}, {}", op, bool_to_type_name(dst.is_vector()), bool_to_type_name(src.is_vector())),
                 line: op_token.line,
                 column: op_token.column,
             })?
-        }
-    };
-    let opcode = match (op, vector) {
-        (InstructionType::ConvertF32ToI32,       false) => OPCODE_SCALAR_CONV_F32_TO_I32,
-        (InstructionType::ConvertF32ToU32,       false) => OPCODE_SCALAR_CONV_F32_TO_U32,
-        (InstructionType::ConvertI32ToF32,       false) => OPCODE_SCALAR_CONV_I32_TO_F32,
-        (InstructionType::ConvertU32ToF32,       false) => OPCODE_SCALAR_CONV_U32_TO_F32,
-        (InstructionType::ConvertF32ToI32,       true ) => OPCODE_VECTOR_CW_CONV_F32_TO_I32,
-        (InstructionType::ConvertF32ToU32,       true ) => OPCODE_VECTOR_CW_CONV_F32_TO_U32,
-        (InstructionType::ConvertI32ToF32,       true ) => OPCODE_VECTOR_CW_CONV_I32_TO_F32,
-        (InstructionType::ConvertU32ToF32,       true ) => OPCODE_VECTOR_CW_CONV_U32_TO_F32,
+        },
 
-        (InstructionType::Neg(OpDataType::F32),  false) => OPCODE_SCALAR_NEG_F32,
-        (InstructionType::Neg(OpDataType::I32),  false) => OPCODE_SCALAR_NEG_I32,
-        (InstructionType::Neg(OpDataType::F32),  true ) => OPCODE_VECTOR_CW_NEG_F32,
-        (InstructionType::Neg(OpDataType::I32),  true ) => OPCODE_VECTOR_CW_NEG_I32,
-
-        (InstructionType::Sign(OpDataType::F32), false) => OPCODE_SCALAR_SIGN_F32,
-        (InstructionType::Sign(OpDataType::I32), false) => OPCODE_SCALAR_SIGN_I32,
-        (InstructionType::Sign(OpDataType::F32), true ) => OPCODE_VECTOR_CW_SIGN_F32,
-        (InstructionType::Sign(OpDataType::I32), true ) => OPCODE_VECTOR_CW_SIGN_I32,
-
-        (InstructionType::Recip,                 false) => OPCODE_SCALAR_RECIP,
-        (InstructionType::Sin,                   false) => OPCODE_SCALAR_SIN,
-        (InstructionType::Cos,                   false) => OPCODE_SCALAR_COS,
-        (InstructionType::Tan,                   false) => OPCODE_SCALAR_TAN,
-        (InstructionType::ASin,                  false) => OPCODE_SCALAR_ASIN,
-        (InstructionType::ACos,                  false) => OPCODE_SCALAR_ACOS,
-        (InstructionType::Atan,                  false) => OPCODE_SCALAR_ATAN,
-        (InstructionType::Ln,                    false) => OPCODE_SCALAR_LN,
-        (InstructionType::Exp,                   false) => OPCODE_SCALAR_EXP,
-
-        (InstructionType::Recip,                 true ) => OPCODE_VECTOR_CW_RECIP,
-        (InstructionType::Sin,                   true ) => OPCODE_VECTOR_CW_SIN,
-        (InstructionType::Cos,                   true ) => OPCODE_VECTOR_CW_COS,
-        (InstructionType::Tan,                   true ) => OPCODE_VECTOR_CW_TAN,
-        (InstructionType::ASin,                  true ) => OPCODE_VECTOR_CW_ASIN,
-        (InstructionType::ACos,                  true ) => OPCODE_VECTOR_CW_ACOS,
-        (InstructionType::Atan,                  true ) => OPCODE_VECTOR_CW_ATAN,
-        (InstructionType::Ln,                    true ) => OPCODE_VECTOR_CW_LN,
-        (InstructionType::Exp,                   true ) => OPCODE_VECTOR_CW_EXP,
         _ => panic!("Invalid InstructionType passed to write_scalar_unary_op() (internal error)"),
     };
     bytes.push(opcode);
     dst.write(bytes, assembly_mode);
     src.write(bytes, assembly_mode);
+    Ok(())
+}
+
+pub fn write_ternary_op(bytes: &mut Vec<u8>, op_token: &Token, op: InstructionType, dst: RegisterName, src_a: RegisterName, src_b: RegisterName, src_c: RegisterName, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
+    let operand_types = (dst.is_vector(), src_a.is_vector(), src_b.is_vector(), src_c.is_vector());
+    const OT_ALL_VECTOR: (bool, bool, bool, bool) = (true, true, true, true);
+    const OT_ALL_SCALAR: (bool, bool, bool, bool) = (false, false, false, false); 
+    const OT_LERP:       (bool, bool, bool, bool) = (true, true, true, false); 
+    let opcode = match (op, operand_types) {
+        (InstructionType::Fma(OpDataType::F32), OT_ALL_SCALAR)=> todo!(),
+        (InstructionType::Fma(OpDataType::I32), OT_ALL_SCALAR)=> todo!(),
+        (InstructionType::Fma(OpDataType::F32), OT_ALL_VECTOR)=> todo!(),
+        (InstructionType::Fma(OpDataType::I32), OT_ALL_VECTOR)=> todo!(),
+        (InstructionType::Fma(_), _) => {
+            Err(SourceError {
+                message: format!(
+                    "Invalid operand types for fma - dst: {}, src_a: {}, src_b: {}, src_c: {}",
+                    bool_to_type_name(operand_types.0),
+                    bool_to_type_name(operand_types.1),
+                    bool_to_type_name(operand_types.2),
+                    bool_to_type_name(operand_types.3),
+                ),
+                line: op_token.line,
+                column: op_token.column,
+            })?
+        },
+        (InstructionType::Lerp, OT_LERP) => todo!(),
+        _ => panic!("Invalid InstructionType passed to write_ternary_op() (internal error)")
+    };
+    bytes.push(opcode);
+    dst.write(bytes, assembly_mode);
+    src_a.write(bytes, assembly_mode);
+    src_b.write(bytes, assembly_mode);
+    src_c.write(bytes, assembly_mode);
     Ok(())
 }

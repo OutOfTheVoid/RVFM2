@@ -78,6 +78,9 @@ pub enum InstructionType {
     Mag2,
     Mag3,
     Mag4,
+    SqMag2,
+    SqMag3,
+    SqMag4,
     Cross,
     MatrixMultiply4x4V4,
 }
