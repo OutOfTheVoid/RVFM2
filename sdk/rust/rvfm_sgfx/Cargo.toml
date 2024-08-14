@@ -1,0 +1,7 @@
+[package]
+name = "rvfm_sgfx"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rvfm_platform = { path = "../rvfm_platform", features = ["critical-section", "multihart", "spinlock"] }

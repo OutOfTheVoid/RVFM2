@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rvfm_platform = { path = "../../sdk/rust/rvfm_platform" }
+rvfm_platform = { path = "../../sdk/rust/rvfm_platform", features = ["critical-section"] }
 glam = { version = "0.28", default-features = false, features = ["libm"] }

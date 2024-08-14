@@ -61,10 +61,7 @@ impl DebugWriter {
 impl Write for DebugWriter {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         write_str(s);
-        match status() {
-            Ok(()) => Ok(()),
-            Err(_) => Err(core::fmt::Error)
-        }
+        Ok(())
     }
 }
 

@@ -16,10 +16,12 @@ pub(crate) unsafe fn hart_id_raw() -> u32 {
     id
 }
 
-pub fn hart_disable_interrupts() {
+pub fn hart_disable_interrupts() -> bool {
+    let previously_enabled: u32;
     unsafe {
-        asm!("csrrci zero, mstatus, 0b1000");
+        asm!("csrrci {}, mstatus, 0b1000", out(reg) previously_enabled);
     }
+    previously_enabled != 0
 }
 
 pub fn hart_enable_interrupts() {

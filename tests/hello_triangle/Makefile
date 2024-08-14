@@ -11,7 +11,7 @@ OBJCOPY_FLAGS = --output-target=binary
 
 SRC_DIR = $(SELF_DIR)src
 TARGET_DIR = $(SELF_DIR)bin
-CARGO_TARGET_DIR = $(SELF_DIR)target/riscv32i-unknown-none-elf
+CARGO_TARGET_DIR = $(SELF_DIR)target/riscv32ima-unknown-none-elf
 
 LD_SCRIPT = ../../sdk/link/link.ld
 

@@ -5,3 +5,11 @@ echo "===================================="
 make clean
 make
 popd
+
+pushd tests/alloc_sgfx
+echo "===================================="
+echo "making tests/alloc_sgfx"
+echo "===================================="
+make clean
+make
+popd

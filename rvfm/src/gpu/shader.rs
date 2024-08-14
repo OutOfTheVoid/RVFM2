@@ -177,24 +177,16 @@ pub enum VectorChannel {
 
 #[allow(unused)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum BufferReadType {
-    D8,
-    D16,
-    D32
+pub enum VectorBufferDataType {
+    Scalar(BufferDataType),
+    V2(BufferDataType),
+    V3(BufferDataType),
+    V4(BufferDataType),
 }
 
 #[allow(unused)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum VectorBufferReadType {
-    Scalar(BufferReadType),
-    V2(BufferReadType),
-    V3(BufferReadType),
-    V4(BufferReadType)
-}
-
-#[allow(unused)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum BufferWriteType {
+pub enum BufferDataType {
     I8,
     I16,
     I32,
@@ -208,15 +200,6 @@ pub enum BufferWriteType {
     UNorm16,
     UNorm32,
     F32,
-}
-
-#[allow(unused)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum VectorBufferWriteType {
-    Scalar(BufferWriteType),
-    V2(BufferWriteType),
-    V3(BufferWriteType),
-    V4(BufferWriteType)
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -402,14 +385,14 @@ pub enum ShaderInstruction {
         mask: u8
     },
     ReadBufferToVector {
-        data_type: VectorBufferReadType,
+        data_type: VectorBufferDataType,
         vector: RegisterAddress<Vector>,
         offset: u32,
         addr_src_u32: Option<RegisterAddress<Scalar>>,
         buffer: u8,
     },
     WriteVectorToBuffer {
-        data_type: VectorBufferWriteType,
+        data_type: VectorBufferDataType,
         src: RegisterAddress<Vector>,
         offset: u32,
         addr_src_u32: Option<RegisterAddress<Scalar>>,
@@ -417,21 +400,21 @@ pub enum ShaderInstruction {
     },
     ConditionallyWriteVectorToBuffer {
         cond: RegisterAddress<Scalar>,
-        data_type: VectorBufferWriteType,
+        data_type: VectorBufferDataType,
         src: RegisterAddress<Vector>,
         offset: u32,
         addr_src_u32: Option<RegisterAddress<Scalar>>,
         buffer: u8,
     },
     ReadBufferToScalar {
-        data_type: BufferReadType,
+        data_type: BufferDataType,
         scalar: RegisterAddress<Scalar>,
         offset: u32,
         addr_src_u32: Option<RegisterAddress<Scalar>>,
         buffer: u8,
     },
     WriteScalarToBuffer {
-        data_type: BufferWriteType,
+        data_type: BufferDataType,
         scalar: RegisterAddress<Scalar>,
         offset: u32,
         addr_dst_u32: Option<RegisterAddress<Scalar>>,
@@ -439,7 +422,7 @@ pub enum ShaderInstruction {
     },
     ConditionallyWriteScalarToBuffer {
         cond: RegisterAddress<Scalar>,
-        data_type: BufferWriteType,
+        data_type: BufferDataType,
         scalar: RegisterAddress<Scalar>,
         offset: u32,
         addr_dst_u32: Option<RegisterAddress<Scalar>>,
@@ -926,115 +909,7 @@ impl ShadingUnitContext {
                 }
             },
             ShaderInstruction::ReadBufferToVector { data_type, vector, offset, addr_src_u32, buffer } => {
-                let buffer_number = resource_map.buffer[*buffer as usize] as usize;
-                let buffer = &buffer_modules[buffer_number];
-                let buffer_bytes = buffer.bytes();
-                let vector_register = self.write_vector_register(*vector, run_context)?;
-                let read_fn = match data_type {
-                    VectorBufferReadType::Scalar(BufferReadType::D8) => |bytes: &[u8], offset: usize|
-                        [
-                            read_bytes_u8(bytes, offset) as u32,
-                            0,
-                            0,
-                            0
-                        ],
-                    VectorBufferReadType::Scalar(BufferReadType::D16) => |bytes: &[u8], offset: usize| 
-                        [
-                            read_bytes_u16(bytes, offset) as u32,
-                            0,
-                            0,
-                            0
-                        ],
-                    VectorBufferReadType::Scalar(BufferReadType::D32) => |bytes: &[u8], offset: usize| 
-                        [
-                            read_bytes_u32(bytes, offset + 0),
-                            0,
-                            0,
-                            0
-                        ],
-                    VectorBufferReadType::V2(BufferReadType::D8) => |bytes: &[u8], offset: usize|
-                        [
-                            read_bytes_u8(bytes, offset + 0) as u32,
-                            read_bytes_u8(bytes, offset + 1) as u32,
-                            0,
-                            0
-                        ],
-                    VectorBufferReadType::V2(BufferReadType::D16) => |bytes: &[u8], offset: usize| 
-                        [
-                            read_bytes_u16(bytes, offset + 0) as u32,
-                            read_bytes_u16(bytes, offset + 2) as u32,
-                            0,
-                            0
-                        ],
-                    VectorBufferReadType::V2(BufferReadType::D32) => |bytes: &[u8], offset: usize| 
-                        [
-                            read_bytes_u32(bytes, offset + 0),
-                            read_bytes_u32(bytes, offset + 4),
-                            0,
-                            0
-                        ],
-                    VectorBufferReadType::V3(BufferReadType::D8) => |bytes: &[u8], offset: usize|
-                        [
-                            read_bytes_u8(bytes, offset + 0) as u32,
-                            read_bytes_u8(bytes, offset + 1) as u32,
-                            read_bytes_u8(bytes, offset + 2) as u32,
-                            0
-                        ],
-                    VectorBufferReadType::V3(BufferReadType::D16) => |bytes: &[u8], offset: usize| 
-                        [
-                            read_bytes_u16(bytes, offset + 0) as u32,
-                            read_bytes_u16(bytes, offset + 2) as u32,
-                            read_bytes_u16(bytes, offset + 4) as u32,
-                            0
-                        ],
-                    VectorBufferReadType::V3(BufferReadType::D32) => |bytes: &[u8], offset: usize| 
-                        [
-                            read_bytes_u32(bytes, offset + 0),
-                            read_bytes_u32(bytes, offset + 4),
-                            read_bytes_u32(bytes, offset + 8),
-                            0
-                        ],
-                    VectorBufferReadType::V4(BufferReadType::D8) => |bytes: &[u8], offset: usize|
-                        [
-                            read_bytes_u8(bytes, offset + 0) as u32,
-                            read_bytes_u8(bytes, offset + 1) as u32,
-                            read_bytes_u8(bytes, offset + 2) as u32,
-                            read_bytes_u8(bytes, offset + 3) as u32,
-                        ],
-                    VectorBufferReadType::V4(BufferReadType::D16) => |bytes: &[u8], offset: usize| 
-                        [
-                            read_bytes_u16(bytes, offset + 0) as u32,
-                            read_bytes_u16(bytes, offset + 2) as u32,
-                            read_bytes_u16(bytes, offset + 4) as u32,
-                            read_bytes_u16(bytes, offset + 6) as u32,
-                        ],
-                    VectorBufferReadType::V4(BufferReadType::D32) => |bytes: &[u8], offset: usize| 
-                        [
-                            read_bytes_u32(bytes, offset + 0),
-                            read_bytes_u32(bytes, offset + 4),
-                            read_bytes_u32(bytes, offset + 8),
-                            read_bytes_u32(bytes, offset + 12),
-                        ],
-                };
-                match addr_src_u32 {
-                    Some(src_register_addr) => {
-                        match self.read_scalar_register(*src_register_addr, run_context) {
-                            RegisterRead::Core(addr_register_list) => {
-                                (0..n).for_each(|i| {
-                                    vector_register[i] = read_fn(buffer_bytes, *offset as usize + addr_register_list[i] as usize);
-                                })
-                            },
-                            RegisterRead::Uniform(addr_register) => {
-                                let value = read_fn(buffer_bytes, *offset as usize + *addr_register as usize);
-                                vector_register[0..n].fill(value);
-                            }
-                        }
-                    },
-                    None => {
-                        let value = read_fn(buffer_bytes, *offset as usize);
-                        vector_register[0..n].fill(value);
-                    }
-                }
+                todo!()
             },
             ShaderInstruction::WriteVectorToBuffer{ data_type, src, offset, addr_src_u32, buffer } => {
                 let buffer_number = resource_map.buffer[*buffer as usize] as usize;
@@ -1042,108 +917,108 @@ impl ShadingUnitContext {
                 let bytes = buffer.bytes_mut();
                 let from_register = self.read_vector_register(*src, run_context);
                 let write_fn = match *data_type {
-                    VectorBufferWriteType::Scalar(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8 (&[vector[0] as  i8 as  u8], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[vector[0] as i16 as u16], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[vector[0] as i32 as u32], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8 (&[vector[0] as  u8], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[vector[0] as u16], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::U32) |
-                    VectorBufferWriteType::Scalar(BufferWriteType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::U32) |
+                    VectorBufferDataType::Scalar(BufferDataType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[vector[0]], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0])], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0])], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0])], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0])], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0])], bytes, offset),
-                    VectorBufferWriteType::Scalar(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::Scalar(BufferDataType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0])], bytes, offset),
                     
-                    VectorBufferWriteType::V2(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8 (&[vector[0] as  i8 as  u8, vector[1] as  i8 as  u8], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[vector[0] as i16 as u16, vector[1] as i16 as u16], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[vector[0] as i32 as u32, vector[1] as i32 as u32], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8 (&[vector[0] as  u8, vector[1] as  u8], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[vector[0] as u16, vector[1] as u16], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::U32) |
-                    VectorBufferWriteType::V2(BufferWriteType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::U32) |
+                    VectorBufferDataType::V2(BufferDataType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[vector[0], vector[1]], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0]), f32_bits_to_inorm8_bits(vector[1])], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0]), f32_bits_to_inorm16_bits(vector[1])], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0]), f32_bits_to_inorm32_bits(vector[1])], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0]), f32_bits_to_unorm8_bits(vector[1])], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0]), f32_bits_to_unorm16_bits(vector[1])], bytes, offset),
-                    VectorBufferWriteType::V2(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V2(BufferDataType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0]), f32_bits_to_unorm32_bits(vector[1])], bytes, offset),
 
-                    VectorBufferWriteType::V3(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8 (&[vector[0] as  i8 as  u8, vector[1] as  i8 as  u8, vector[2] as  i8 as  u8], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[vector[0] as i16 as u16, vector[1] as i16 as u16, vector[2] as i16 as u16], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[vector[0] as i32 as u32, vector[1] as i32 as u32, vector[2] as i32 as u32], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8 (&[vector[0] as  u8, vector[1] as  u8, vector[2] as  u8], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[vector[0] as u16, vector[1] as u16, vector[2] as u16], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::U32) |
-                    VectorBufferWriteType::V3(BufferWriteType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::U32) |
+                    VectorBufferDataType::V3(BufferDataType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[vector[0], vector[1], vector[2]], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0]), f32_bits_to_inorm8_bits(vector[1]), f32_bits_to_inorm8_bits(vector[2])], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0]), f32_bits_to_inorm16_bits(vector[1]), f32_bits_to_inorm16_bits(vector[2])], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0]), f32_bits_to_inorm32_bits(vector[1]), f32_bits_to_inorm32_bits(vector[2])], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0]), f32_bits_to_unorm8_bits(vector[1]), f32_bits_to_unorm8_bits(vector[2])], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0]), f32_bits_to_unorm16_bits(vector[1]), f32_bits_to_unorm16_bits(vector[2])], bytes, offset),
-                    VectorBufferWriteType::V3(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V3(BufferDataType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0]), f32_bits_to_unorm32_bits(vector[1]), f32_bits_to_unorm32_bits(vector[2])], bytes, offset),
 
-                    VectorBufferWriteType::V4(BufferWriteType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::I8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8 (&[vector[0] as  i8 as  u8, vector[1] as  i8 as  u8, vector[2] as  i8 as  u8, vector[3] as  i8 as  u8], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::I16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[vector[0] as i16 as u16, vector[1] as i16 as u16, vector[2] as i16 as u16, vector[3] as i16 as u16], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::I32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[vector[0] as i32 as u32, vector[1] as i32 as u32, vector[2] as i32 as u32, vector[3] as i32 as u32], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::U8 ) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8 (&[vector[0] as  u8, vector[1] as  u8, vector[2] as  u8, vector[3] as  u8], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::U16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[vector[0] as u16, vector[1] as u16, vector[2] as u16, vector[3] as u16], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::U32) |
-                    VectorBufferWriteType::V4(BufferWriteType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::U32) |
+                    VectorBufferDataType::V4(BufferDataType::F32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[vector[0], vector[1], vector[2], vector[3]], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::INorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8(&[f32_bits_to_inorm8_bits(vector[0]), f32_bits_to_inorm8_bits(vector[1]), f32_bits_to_inorm8_bits(vector[2]), f32_bits_to_inorm8_bits(vector[3])], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::INorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[f32_bits_to_inorm16_bits(vector[0]), f32_bits_to_inorm16_bits(vector[1]), f32_bits_to_inorm16_bits(vector[2]), f32_bits_to_inorm16_bits(vector[3])], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::INorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[f32_bits_to_inorm32_bits(vector[0]), f32_bits_to_inorm32_bits(vector[1]), f32_bits_to_inorm32_bits(vector[2]), f32_bits_to_inorm32_bits(vector[3])], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::UNorm8) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u8(&[f32_bits_to_unorm8_bits(vector[0]), f32_bits_to_unorm8_bits(vector[1]), f32_bits_to_unorm8_bits(vector[2]), f32_bits_to_unorm8_bits(vector[3])], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::UNorm16) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u16(&[f32_bits_to_unorm16_bits(vector[0]), f32_bits_to_unorm16_bits(vector[1]), f32_bits_to_unorm16_bits(vector[2]), f32_bits_to_unorm16_bits(vector[3])], bytes, offset),
-                    VectorBufferWriteType::V4(BufferWriteType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
+                    VectorBufferDataType::V4(BufferDataType::UNorm32) => |bytes: &mut [u8], offset: usize, vector: [u32; 4]|
                         write_bytes_u32(&[f32_bits_to_unorm32_bits(vector[0]), f32_bits_to_unorm32_bits(vector[1]), f32_bits_to_unorm32_bits(vector[2]), f32_bits_to_unorm32_bits(vector[3])], bytes, offset),
                 };
                 match addr_src_u32 {
@@ -1172,33 +1047,52 @@ impl ShadingUnitContext {
                 }
             },
             ShaderInstruction::ReadBufferToScalar { data_type, scalar, offset, addr_src_u32, buffer } => {
-                let buffer_number = resource_map.buffer[*buffer as usize] as usize;
-                let buffer = &buffer_modules[buffer_number];
-                let bytes = buffer.bytes();
+                let scalar_reg = self.write_scalar_register(*scalar, run_context)?;
+                let addr_src_reg = addr_src_u32.map(|reg_addr| self.read_scalar_register(reg_addr, run_context));
+                let buffer = &buffer_modules[*buffer as usize];
                 let read_fn = match data_type {
-                    BufferReadType::D8  => |bytes: &[u8], offset: usize| read_bytes_u8(bytes, offset) as u32,
-                    BufferReadType::D16 => |bytes: &[u8], offset: usize| read_bytes_u16(bytes, offset) as u32,
-                    BufferReadType::D32 => |bytes: &[u8], offset: usize| read_bytes_u32(bytes, offset),
+                    BufferDataType::F32 |
+                    BufferDataType::U32 |
+                    BufferDataType::I32     => |bytes: &[u8], offset: usize|
+                        read_bytes_u32(bytes, offset),
+
+                    BufferDataType::INorm32 => |bytes: &[u8], offset: usize|
+                        (read_bytes_u32(bytes, offset) as i32 as f32 / std::i32::MAX as f32).to_bits(),
+
+                    BufferDataType::INorm16 => |bytes: &[u8], offset: usize| 
+                        (read_bytes_u16(bytes, offset) as i16 as f32 / std::i16::MAX as f32).to_bits(),
+
+                    BufferDataType::INorm8  => |bytes: &[u8], offset: usize|
+                        (read_bytes_u8(bytes, offset) as i8 as f32 / std::i8::MAX as f32).to_bits(),
+
+                    BufferDataType::UNorm32 => |bytes: &[u8], offset: usize|
+                        (read_bytes_u32(bytes, offset) as u32 as f32 / std::u32::MAX as f32).to_bits(),
+
+                    BufferDataType::UNorm16 => |bytes: &[u8], offset: usize|
+                        (read_bytes_u16(bytes, offset) as u16 as f32 / std::u16::MAX as f32).to_bits(),
+
+                    BufferDataType::UNorm8  => |bytes: &[u8], offset: usize|
+                        (read_bytes_u8(bytes, offset) as u8 as f32 / std::u8::MAX as f32).to_bits(),
+
+                    BufferDataType::U16     => |bytes: &[u8], offset: usize|
+                        read_bytes_u16(bytes, offset) as u32,
+
+                    BufferDataType::U8      => |bytes: &[u8], offset: usize|
+                        read_bytes_u8(bytes, offset) as u32,
+
+                    BufferDataType::I16     => |bytes: &[u8], offset: usize|
+                        read_bytes_u16(bytes, offset) as i16 as i32 as u32,
+
+                    BufferDataType::I8      => |bytes: &[u8], offset: usize|
+                        read_bytes_u8(bytes, offset) as i8 as i32 as u32,
                 };
-                let scalar_register = self.write_scalar_register(*scalar, run_context)?;
-                match addr_src_u32 {
-                    Some(src_register_addr) => {
-                        match self.read_scalar_register(*src_register_addr, run_context) {
-                            RegisterRead::Core(addr_register_list) => {
-                                (0..n).for_each(|i| {
-                                    scalar_register[i] = read_fn(bytes, *offset as usize + addr_register_list[i] as usize);
-                                })
-                            },
-                            RegisterRead::Uniform(addr_register) => {
-                                let value = read_fn(bytes, *offset as usize + *addr_register as usize);
-                                scalar_register[0..n].fill(value);
-                            }
-                        }
-                    },
-                    None => {
-                        let value = read_fn(bytes, *offset as usize);
-                        scalar_register[0..n].fill(value);
-                    }
+                match addr_src_reg {
+                    None =>
+                        (0..n).for_each(|i| scalar_reg[i] = read_fn(buffer.bytes(), *offset as usize)),
+                    Some(RegisterRead::Uniform(addr_src)) =>
+                        (0..n).for_each(|i| scalar_reg[i] = read_fn(buffer.bytes(), (*addr_src + *offset) as usize)),
+                    Some(RegisterRead::Core(addr_src_list)) =>
+                        (0..n).for_each(|i| scalar_reg[i] = read_fn(buffer.bytes(), (addr_src_list[i] + *offset) as usize)),
                 }
             },
             ShaderInstruction::WriteScalarToBuffer { data_type, scalar, offset, addr_dst_u32, buffer } => {
@@ -1207,19 +1101,19 @@ impl ShadingUnitContext {
                 let bytes = buffer.bytes_mut();
                 let from_register = self.read_scalar_register(*scalar, run_context);
                 let write_fn = match *data_type {
-                    BufferWriteType::I8      => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[scalar as i32 as  i8 as  u8], bytes, offset),
-                    BufferWriteType::I16     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[scalar as i32 as i16 as u16], bytes, offset),
-                    BufferWriteType::I32     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[scalar as i32 as i32 as u32], bytes, offset),
-                    BufferWriteType::U8      => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[scalar as  u8], bytes, offset),
-                    BufferWriteType::U16     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[scalar as u16], bytes, offset),
-                    BufferWriteType::U32 |
-                    BufferWriteType::F32     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[scalar], bytes, offset),
-                    BufferWriteType::INorm8  => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[f32_bits_to_inorm8_bits (scalar)], bytes, offset),
-                    BufferWriteType::INorm16 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[f32_bits_to_inorm16_bits(scalar)], bytes, offset),
-                    BufferWriteType::INorm32 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[f32_bits_to_inorm32_bits(scalar)], bytes, offset),
-                    BufferWriteType::UNorm8  => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[f32_bits_to_unorm8_bits (scalar)], bytes, offset),
-                    BufferWriteType::UNorm16 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[f32_bits_to_unorm16_bits(scalar)], bytes, offset),
-                    BufferWriteType::UNorm32 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[f32_bits_to_unorm32_bits(scalar)], bytes, offset),   
+                    BufferDataType::I8      => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[scalar as i32 as  i8 as  u8], bytes, offset),
+                    BufferDataType::I16     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[scalar as i32 as i16 as u16], bytes, offset),
+                    BufferDataType::I32     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[scalar as i32 as i32 as u32], bytes, offset),
+                    BufferDataType::U8      => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[scalar as  u8], bytes, offset),
+                    BufferDataType::U16     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[scalar as u16], bytes, offset),
+                    BufferDataType::U32 |
+                    BufferDataType::F32     => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[scalar], bytes, offset),
+                    BufferDataType::INorm8  => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[f32_bits_to_inorm8_bits (scalar)], bytes, offset),
+                    BufferDataType::INorm16 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[f32_bits_to_inorm16_bits(scalar)], bytes, offset),
+                    BufferDataType::INorm32 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[f32_bits_to_inorm32_bits(scalar)], bytes, offset),
+                    BufferDataType::UNorm8  => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u8 (&[f32_bits_to_unorm8_bits (scalar)], bytes, offset),
+                    BufferDataType::UNorm16 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u16(&[f32_bits_to_unorm16_bits(scalar)], bytes, offset),
+                    BufferDataType::UNorm32 => |bytes: &mut [u8], offset: usize, scalar: u32| write_bytes_u32(&[f32_bits_to_unorm32_bits(scalar)], bytes, offset),   
                 };
                 match addr_dst_u32 {
                     Some(src_register_addr) => {

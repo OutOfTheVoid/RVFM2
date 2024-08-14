@@ -3,6 +3,12 @@ use super::hart::Hart;
 use core::arch::global_asm;
 use core::ptr::addr_of_mut;
 
+#[cfg(feature = "critical-section")]
+pub mod critical_section;
+
+#[cfg(feature = "spinlock")]
+pub mod spinlock;
+
 global_asm!(include_str!("trampoline.s"));
 
 extern "C" {

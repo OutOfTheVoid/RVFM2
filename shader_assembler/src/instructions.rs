@@ -9,6 +9,14 @@ const REGTYPE_LOCAL    : u8 = 0x00;
 const REGTYPE_INPUT    : u8 = 0x01;
 const REGTYPE_OUTPUT   : u8 = 0x02;
 const REGTYPE_CONSTANT : u8 = 0x03;
+const REGTYPE_NONE     : u8 = 0xFF;
+
+impl RegisterName {
+    fn write_none(bytes: &mut Vec<u8>) {
+        bytes.push(REGTYPE_NONE);
+        bytes.push(0x00);
+    }
+}
 
 impl WriteInstructionBytes for RegisterName {
     fn write(&self, bytes: &mut Vec<u8>, assembly_mode: AssemblyMode) {
@@ -45,6 +53,13 @@ impl WriteInstructionBytes for RegisterName {
     }
 }
 
+
+fn write_offset_u32(bytes: &mut Vec<u8>, offset: u32) {
+    bytes.push((offset >>  0) as u8);
+    bytes.push((offset >>  8) as u8);
+    bytes.push((offset >> 16) as u8);
+    bytes.push((offset >> 24) as u8);
+}
 
 // ==================================================================== //
 // These should match the definitions in rvfm/src/gpu/shader_parser.rs  //
@@ -151,6 +166,11 @@ const OPCODE_SQ_MAG3                                 : u8 = 0x5A;
 const OPCODE_SQ_MAG4                                 : u8 = 0x5B;
 
 const OPCODE_CROSS                                   : u8 = 0x5C;
+
+const OPCODE_FMA_SCALAR_F32                          : u8 = 0x5D;
+const OPCODE_FMA_SCALAR_I32                          : u8 = 0x5E;
+
+const OPCODE_BUFFER_READ_SCALAR                      : u8 = 0x5F;
 
 pub fn write_push(bytes: &mut Vec<u8>, src: RegisterName, _src_token: &Token, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
     bytes.push(if src.is_vector() { OPCODE_VECTOR_PUSH } else { OPCODE_SCALAR_PUSH });
@@ -652,5 +672,27 @@ pub fn write_ternary_op(bytes: &mut Vec<u8>, op_token: &Token, op: InstructionTy
     src_a.write(bytes, assembly_mode);
     src_b.write(bytes, assembly_mode);
     src_c.write(bytes, assembly_mode);
+    Ok(())
+}
+
+pub fn write_buffer_read_op(bytes: &mut Vec<u8>, _op_token: &Token, _op: InstructionType, data_type: BufferDataType, dst: RegisterName, dst_token: &Token, src_addr_u32: Option<RegisterName>, offset: u32, buffer: u8, assembly_mode: AssemblyMode) -> Result<(), SourceError> {
+    let vector = dst.is_vector();
+    if vector {
+        Err(SourceError {
+            message: format!("Expected scalar register in scalar buffer read"),
+            line: dst_token.line,
+            column: dst_token.column,
+        })?
+    }
+    bytes.push(OPCODE_BUFFER_READ_SCALAR);
+    bytes.push(data_type.to_u8());
+    dst.write(bytes, assembly_mode);
+    write_offset_u32(bytes, offset);
+    bytes.push(buffer);
+    if let Some(addr_src_reg) = src_addr_u32 {
+        addr_src_reg.write(bytes, assembly_mode);
+    } else {
+        RegisterName::write_none(bytes);
+    }
     Ok(())
 }
