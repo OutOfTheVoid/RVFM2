@@ -2,14 +2,11 @@
 flamegraph.svg
 .DS_Store
 Cargo.lock
-sdk/rust/rvfm_platform/target
+sdk/rust/*/target
 .vscode/
 callgraph.svg
 shader_assembler/target
-tests/rust/target
-tests/hello_triangle/target
-tests/alloc_sgfx/target
 tests/*/target
 tests/*/bin
-tests/*/obj/**
+tests/*/obj
 rvfm/target
