@@ -10,14 +10,18 @@ pub enum SpuQueue {
     Queue3 = 3,
 }
 
-pub trait SpuCommandBuilderExt: Sized {
-    fn reset_sample_counter(self, reset_value: u32) -> Result<Self, ()>;
-    fn wait_sample_counter(self, sample_count: u32) -> Result<Self, ()>;
-    fn write_flag(self, flag_address: u32, value: u32, interrupt: bool) -> Result<Self, ()>;
+pub enum SpuCommandBuilderError {
+    OutOfSpace
 }
 
-impl SpuCommandBuilderExt for CommandListBuilder<'_, SpuCommands> {
-    fn reset_sample_counter(self, reset_value: u32) -> Result<Self, ()> {
+pub trait SpuCommandBuilderExt: Sized {
+    fn reset_sample_counter(&mut self, reset_value: u32) -> Result<(), SpuCommandBuilderError>;
+    fn wait_sample_counter(&mut self, sample_count: u32) -> Result<(), SpuCommandBuilderError>;
+    fn write_flag(&mut self, flag_address: u32, value: u32, interrupt: bool) -> Result<(), SpuCommandBuilderError>;
+}
+
+impl<C: CommandListCompletion, D: CommandListData<SpuCommands>, Builder: CommandListBuilder<SpuCommands, Data = D, Completion = C>> SpuCommandBuilderExt for Builder {
+    fn reset_sample_counter(&mut self, reset_value: u32) -> Result<(), SpuCommandBuilderError> {
         let reset_value_bytes = command_u32_bytes(reset_value);
         let data = &[
             0x00,
@@ -26,10 +30,14 @@ impl SpuCommandBuilderExt for CommandListBuilder<'_, SpuCommands> {
             reset_value_bytes[2],
             reset_value_bytes[3],
         ];
-        self.push_command(data)
+        if !self.push_command(data) {
+			Err(SpuCommandBuilderError::OutOfSpace)
+		} else {
+			Ok(())
+		}
     }
 
-    fn wait_sample_counter(self, sample_count: u32) -> Result<Self, ()> {
+    fn wait_sample_counter(&mut self, sample_count: u32) -> Result<(), SpuCommandBuilderError> {
         let sample_count_bytes = command_u32_bytes(sample_count);
         let data = &[
             0x01,
@@ -38,10 +46,14 @@ impl SpuCommandBuilderExt for CommandListBuilder<'_, SpuCommands> {
             sample_count_bytes[2],
             sample_count_bytes[3],
         ];
-        self.push_command(data)
+        if !self.push_command(data) {
+			Err(SpuCommandBuilderError::OutOfSpace)
+		} else {
+			Ok(())
+		}
     }
 
-    fn write_flag(self, flag_address: u32, value: u32, interrupt: bool) -> Result<Self, ()> {
+    fn write_flag(&mut self, flag_address: u32, value: u32, interrupt: bool) -> Result<(), SpuCommandBuilderError> {
         let flag_address_bytes = command_u32_bytes(flag_address);
         let data = &[
             0x02,
@@ -51,15 +63,20 @@ impl SpuCommandBuilderExt for CommandListBuilder<'_, SpuCommands> {
             flag_address_bytes[2],
             flag_address_bytes[3],
         ];
-        self.push_command(data)
+        if !self.push_command(data) {
+			Err(SpuCommandBuilderError::OutOfSpace)
+		} else {
+			Ok(())
+		}
     }
 }
 
 impl SpuQueue {
-    pub fn submit<'l, 'c: 'l>(&self, command_list: CommandList<'l, SpuCommands>, completion: &'c mut u32) -> CommandListCompletion<'c> {
-        unsafe { (completion as *mut u32).write_volatile(0); }
-        command_list.0[4..8].copy_from_slice(&command_u32_bytes(completion as *mut u32 as usize as u32));
-        unsafe { ((0x08004_0010 + ((*self as u32) << 2)) as usize as *mut u32).write_volatile(command_list.0.as_ptr() as usize as u32); }
-        CommandListCompletion(completion)
+    pub fn submit<Completion: CommandListCompletion, CommandData: CommandListData<SpuCommands>>(&self, command_list: &mut CommandData, completion: Completion) {
+        unsafe {
+            (completion.raw_ptr()).write_volatile(0);
+            command_list.command_list_bytes()[4..8].copy_from_slice(&command_u32_bytes(completion.raw_ptr() as usize as u32));
+            ((0x08004_0010 + ((*self as u32) << 2)) as usize as *mut u32).write_volatile(command_list.command_list_bytes().as_ptr() as usize as u32);
+        }
     }
 }

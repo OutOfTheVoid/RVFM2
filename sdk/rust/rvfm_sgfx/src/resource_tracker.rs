@@ -1,5 +1,7 @@
 use rvfm_platform::multihart::spinlock::SpinLock;
 use alloc::sync::Arc;
+use core::sync::atomic::{self, AtomicU32};
+use alloc::vec::Vec;
 
 pub(crate) struct TrackedResources {
     pub texture_allocs: [u32; 2],
@@ -8,9 +10,13 @@ pub(crate) struct TrackedResources {
     pub pipeline_state_allocs: [u32; 2],
 }
 
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct TextureHandle(u8);
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct BufferHandle(u8);
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct ShaderHandle(u8);
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct PipelineStateHandle(u8);
 
 impl TrackedResources {
@@ -84,12 +90,17 @@ impl ResourceTracker {
                     shader_allocs: [0; 4],
                     pipeline_state_allocs: [0; 2],
                 }
-            ))
+            )),
         }
     }
 
     pub fn alloc_buffer(&self) -> Option<BufferHandle> {
-        let mut gaurd = self.resources.lock();
-        gaurd.alloc_buffer()
+        let mut resources = self.resources.lock();
+        resources.alloc_buffer()
+    }
+
+    pub fn free_buffer(&self, handle: BufferHandle) {
+        let mut resources = self.resources.lock();
+        resources.free_buffer(handle);
     }
 }

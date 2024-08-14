@@ -6,6 +6,7 @@ use rvfm_platform::debug::*;
 use rvfm_platform::multihart::spinlock::RawSpinLock;
 
 use core::arch::global_asm;
+use core::ptr::addr_of_mut;
 
 global_asm!(include_str!("init.s"));
 
@@ -23,7 +24,7 @@ static ALLOCATOR: Talck<RawSpinLock, ErrOnOom> = Talc::new(ErrOnOom).lock();
 extern "C" fn main() {
     println!("Hello, world!");
 
-    unsafe { ALLOCATOR.lock().claim(Span::from(&mut ARENA)) };
+    unsafe { ALLOCATOR.lock().claim(Span::from(addr_of_mut!(ARENA))).unwrap() };
 
     let test = Box::new(3);
 

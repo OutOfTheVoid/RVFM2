@@ -21,7 +21,7 @@ struct BufferInternal {
 
 impl Drop for BufferInternal {
     fn drop(&mut self) {
-        
+        self.instance.free_buffer(self.handle);
     }
 }
 

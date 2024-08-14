@@ -1,11 +1,11 @@
 use alloc::sync::Arc;
-use rvfm_platform::multihart::spinlock::*;
+use core::sync::atomic::AtomicUsize;
 
-use crate::{buffer::Buffer, resource_tracker::ResourceTracker};
+use crate::{buffer::Buffer, resource_tracker::{BufferHandle, ResourceTracker}};
 
 struct RawInstance {
     resource_tracker: ResourceTracker,
-
+    sequence_counter: AtomicUsize,
 }
 
 #[derive(Clone)]
@@ -20,16 +20,24 @@ pub enum ResourceCreateError {
 
 impl Instance {
     pub fn new() -> Self {
+        let sequence_counter = AtomicUsize::new(0);
         let raw_instance = RawInstance {
-            resource_tracker: ResourceTracker::new()
+            resource_tracker: ResourceTracker::new(),
+            sequence_counter,
         };
         Self(Arc::new(raw_instance))
     }
 
     pub fn create_buffer(&self, size: usize) -> Result<Buffer, ResourceCreateError> {
         match self.0.resource_tracker.alloc_buffer() {
-            Some(buffer_handle) => Ok(Buffer::new(buffer_handle, self, size)),
+            Some(buffer_handle) => {
+                Ok(Buffer::new(buffer_handle, self, size))
+            },
             None => Err(ResourceCreateError::NoneFree),
         }
+    }
+
+    pub(crate) fn free_buffer(&self, buffer: BufferHandle) {
+        self.0.resource_tracker.free_buffer(buffer);
     }
 }

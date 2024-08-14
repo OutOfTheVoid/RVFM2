@@ -1,4 +1,0 @@
-cargo::rerun-if-changed=build.rs
-cargo::rerun-if-changed=link.ld
-cargo::rerun-if-changed=src/multihart/trampoline.s
-cargo::metadata=LINKER_SCRIPT=/Users/liam/rvfm2/sdk/rust/rvfm_platform/link.ld

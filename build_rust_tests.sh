@@ -1,3 +1,11 @@
+pushd tests/rust
+echo "===================================="
+echo "making tests/rust"
+echo "===================================="
+make 
+popd
+
+
 pushd tests/hello_triangle
 echo "===================================="
 echo "making tests/hello_triangle"

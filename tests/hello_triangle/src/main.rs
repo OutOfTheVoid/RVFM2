@@ -3,6 +3,7 @@
 
 use core::arch::global_asm;
 use core::ptr::addr_of_mut;
+use core::sync::atomic;
 
 global_asm!(include_str!("init.s"));
 
@@ -128,7 +129,7 @@ const PIPELINE_STATE: GraphicsPipelineState = GraphicsPipelineState::new(
     &RASTERIZER_STATE
 );
 
-fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], constant_data: &ConstantData, present_completion: &'c mut u32) -> Result<(CommandList<'a, GpuCommands>, CommandListCompletion<'c>), ()> {
+fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], constant_data: &ConstantData, present_completion: &mut StaticCommandListCompletion<'c>) -> Result<StaticCommandList<'a, GpuCommands>, GpuCommandBuilderError> {
     let texture_config = TextureConfig {
         width: 512,
         height: 384,
@@ -143,47 +144,50 @@ fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], constant_data
         y_high: 384,
     };
 
-    *present_completion = 0;
+    present_completion.reset(0);
 
-    let (builder, present_completion) = CommandListBuilder::new(command_list_bytes)
-        .set_video_mode(VideoResolution::R512x384, true, true, true)?
-        .configure_buffer              (VERTEX_BUFFER_ID,         VERTEX_DATA.len() as u32 * core::mem::size_of::<f32>() as u32)?
-        .upload_buffer                 (VERTEX_BUFFER_ID,         VERTEX_DATA.as_ptr() as *const u8)?
-        .configure_buffer              (CONSTANT_BUFFER_ID,       core::mem::size_of::<ConstantData>() as u32)?
-        .upload_buffer                 (CONSTANT_BUFFER_ID,       constant_data as *const _ as *const u8)?
+    let mut builder = StaticCommandListBuilder::new(command_list_bytes);
+    builder.set_video_mode(VideoResolution::R512x384, true, true, true)?;
+    builder.configure_buffer              (VERTEX_BUFFER_ID,         VERTEX_DATA.len() as u32 * core::mem::size_of::<f32>() as u32)?;
+    builder.upload_buffer                 (VERTEX_BUFFER_ID,         VERTEX_DATA.as_ptr() as *const u8)?;
+    builder.configure_buffer              (CONSTANT_BUFFER_ID,       core::mem::size_of::<ConstantData>() as u32)?;
+    builder.upload_buffer                 (CONSTANT_BUFFER_ID,       constant_data as *const _ as *const u8)?;
+    
+    builder.configure_texture             (RENDER_TEXTURE_ID,        &texture_config)?;
+    
+    builder.upload_shader                 (VERTEX_SHADER_ID,         ShaderKind::Vertex, VERTEX_SHADER)?;
+    builder.upload_shader                 (FRAGMENT_SHADER_ID,       ShaderKind::Fragment, FRAGMENT_SHADER)?;
+    builder.upload_graphics_pipeline_state(PIPELINE_STATE_ID,         &PIPELINE_STATE)?;
         
-        .configure_texture             (RENDER_TEXTURE_ID,        &texture_config)?
-        
-        .upload_shader                 (VERTEX_SHADER_ID,         ShaderKind::Vertex, VERTEX_SHADER)?
-        .upload_shader                 (FRAGMENT_SHADER_ID,       ShaderKind::Fragment, FRAGMENT_SHADER)?
-        .upload_graphics_pipeline_state(PIPELINE_STATE_ID,         &PIPELINE_STATE)?
-         
-        .set_constant_sampler_unorm8   (CLEAR_CONSTANT_SAMPLER_ID, [0, 0, 0, 255])?
-        .clear_texture                 (RENDER_TEXTURE_ID,         CLEAR_CONSTANT_SAMPLER_ID)?
-        .draw_graphics_pipeline        (PIPELINE_STATE_ID,         VERTEX_SHADER_ID, FRAGMENT_SHADER_ID, 3, clipping_rect)?
-        .present_texture               (RENDER_TEXTURE_ID,         present_completion, false)?;
+    builder.set_constant_sampler_unorm8   (CLEAR_CONSTANT_SAMPLER_ID, [0, 0, 0, 255])?;
+    builder.clear_texture                 (RENDER_TEXTURE_ID,         CLEAR_CONSTANT_SAMPLER_ID)?;
+    builder.draw_graphics_pipeline        (PIPELINE_STATE_ID,         VERTEX_SHADER_ID, FRAGMENT_SHADER_ID, 3, clipping_rect)?;
+    builder.present_texture               (RENDER_TEXTURE_ID,         present_completion, false)?;
     let command_list = builder.finish();
-    Ok((command_list, present_completion))
+    Ok(command_list)
 }
 
 #[no_mangle]
 extern "C" fn main() {
-    let mut completion_variable = 0u32;
-    let mut present_completion_variable = 0u32;
     let mut command_list_bytes = [0u8; 1024];
     let mut angle = 0.0;
     let mut constant_data = ConstantData {
         numeric_constants: [0.0, 0.0, 0.5, 1.0],
         transform_matrix: Mat4::IDENTITY.to_cols_array()
     };
+    let submit_completion_variable = atomic::AtomicU32::new(0);
+    let present_completion_variable = atomic::AtomicU32::new(0);
+    let mut submit_completion = StaticCommandListCompletion::new(&submit_completion_variable);
+    let mut present_completion = StaticCommandListCompletion::new(&present_completion_variable);
+    let mut command_list = build_commandlist(&mut command_list_bytes[..], &constant_data, &mut present_completion).unwrap();
     loop {
         angle += 0.01;
         constant_data.transform_matrix = Mat4::from_rotation_z(angle).to_cols_array();
         {
-            let (command_list, mut present_completion) = build_commandlist(&mut command_list_bytes[..], &constant_data, &mut present_completion_variable).unwrap();
-            let mut submit_completion = gpu_submit(command_list, &mut completion_variable);
-            submit_completion.wait();
-            present_completion.wait();
+            present_completion.reset(0);
+            gpu_submit(&mut command_list, &mut submit_completion);
+            submit_completion.wait_nonzero();
+            present_completion.wait_nonzero();
         }
     }
 

@@ -1,6 +1,4 @@
-use core::cell::UnsafeCell;
 use core::sync::atomic;
-use core::convert::{AsRef, AsMut};
 
 use lock_api::{GuardSend, Mutex, MutexGuard};
 
