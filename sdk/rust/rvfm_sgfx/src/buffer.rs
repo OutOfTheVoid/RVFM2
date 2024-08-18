@@ -3,41 +3,40 @@ use core::sync::atomic::AtomicU32;
 use alloc::sync::Arc;
 use rvfm_platform::multihart::spinlock::SpinLock;
 
-use crate::instance::Instance;
+use crate::{instance::Instance, resource_tracker::ResourceTracker};
 
 use super::resource_tracker::BufferHandle;
 
-struct BufferState {
-    size: usize,
-    dirty: bool,
+pub(crate) struct BufferState {
+    pub size: usize,
+    pub sid: usize,
 }
 
-struct BufferInternal {
-    handle: BufferHandle,
-    instance: Instance,
-    state: SpinLock<BufferState>,
-
+pub(crate) struct BufferInternal {
+    pub handle: BufferHandle,
+    pub state: SpinLock<BufferState>,
+    pub tracker: ResourceTracker,
 }
 
 impl Drop for BufferInternal {
     fn drop(&mut self) {
-        self.instance.free_buffer(self.handle);
+        self.tracker.free_buffer(self.handle);
     }
 }
 
-pub struct Buffer(Arc<BufferInternal>);
+pub struct Buffer(pub(crate) Arc<BufferInternal>);
 
 
 impl Buffer {
-    pub(crate) fn new(handle: BufferHandle, instance: &Instance, size: usize) -> Self {
+    pub(crate) fn new(handle: BufferHandle, tracker: ResourceTracker, size: usize, creation_sid: usize) -> Self {
         let state = BufferState {
             size,
-            dirty: true
+            sid: creation_sid,
         };
         Self(Arc::new(BufferInternal {
             handle,
-            instance: instance.clone(),
-            state: SpinLock::new(state)
+            state: SpinLock::new(state),
+            tracker
         }))
     }
 }

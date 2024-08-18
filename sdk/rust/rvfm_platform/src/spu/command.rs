@@ -14,13 +14,13 @@ pub enum SpuCommandBuilderError {
     OutOfSpace
 }
 
-pub trait SpuCommandBuilderExt: Sized {
+pub trait SpuCommandBuilderExt<'c, 'd>: CommandListBuilder<'c, 'd, SpuCommands> + Sized {
     fn reset_sample_counter(&mut self, reset_value: u32) -> Result<(), SpuCommandBuilderError>;
     fn wait_sample_counter(&mut self, sample_count: u32) -> Result<(), SpuCommandBuilderError>;
-    fn write_flag(&mut self, flag_address: u32, value: u32, interrupt: bool) -> Result<(), SpuCommandBuilderError>;
+    fn write_flag(&mut self, completion: &mut Self::Completion, interrupt: bool) -> Result<(), SpuCommandBuilderError>;
 }
 
-impl<C: CommandListCompletion, D: CommandListData<SpuCommands>, Builder: CommandListBuilder<SpuCommands, Data = D, Completion = C>> SpuCommandBuilderExt for Builder {
+impl<'c, 'd, Builder: CommandListBuilder<'c, 'd, SpuCommands>> SpuCommandBuilderExt<'c, 'd> for Builder {
     fn reset_sample_counter(&mut self, reset_value: u32) -> Result<(), SpuCommandBuilderError> {
         let reset_value_bytes = command_u32_bytes(reset_value);
         let data = &[
@@ -53,8 +53,8 @@ impl<C: CommandListCompletion, D: CommandListData<SpuCommands>, Builder: Command
 		}
     }
 
-    fn write_flag(&mut self, flag_address: u32, value: u32, interrupt: bool) -> Result<(), SpuCommandBuilderError> {
-        let flag_address_bytes = command_u32_bytes(flag_address);
+    fn write_flag(&mut self, completion: &mut Self::Completion, interrupt: bool) -> Result<(), SpuCommandBuilderError> {
+        let flag_address_bytes = command_u32_bytes(unsafe { completion.raw_ptr() } as usize as u32);
         let data = &[
             0x02,
             if interrupt { 0x01 } else { 0x00 },
@@ -72,7 +72,7 @@ impl<C: CommandListCompletion, D: CommandListData<SpuCommands>, Builder: Command
 }
 
 impl SpuQueue {
-    pub fn submit<Completion: CommandListCompletion, CommandData: CommandListData<SpuCommands>>(&self, command_list: &mut CommandData, completion: Completion) {
+    pub fn submit<'c, 'd, Completion: CommandListCompletion<'c>, CommandData: CommandListData<'d, SpuCommands>>(&self, command_list: &mut CommandData, completion: Completion) {
         unsafe {
             (completion.raw_ptr()).write_volatile(0);
             command_list.command_list_bytes()[4..8].copy_from_slice(&command_u32_bytes(completion.raw_ptr() as usize as u32));

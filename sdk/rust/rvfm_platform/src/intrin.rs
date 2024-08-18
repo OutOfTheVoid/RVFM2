@@ -1,4 +1,5 @@
 #![allow(unused)]
+#![allow(asm_sub_register)]
 
 use core::arch::asm;
 

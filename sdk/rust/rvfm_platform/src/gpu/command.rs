@@ -1,5 +1,9 @@
+use core::sync::atomic::{self, AtomicU32};
+
 use crate::command_list::*;
 use super::pipeline_state::GraphicsPipelineState;
+use crate::debug::println;
+use crate::rvfm_platform;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VideoResolution {
@@ -64,9 +68,9 @@ pub struct ClippingRect {
     pub y_high: u16,
 }
 
-pub trait GpuCommandBuilderExt: Sized {
+pub trait GpuCommandBuilderExt<'c, 'd>: CommandListBuilder<'c, 'd, GpuCommands> + Sized {
     fn clear_texture(&mut self, texture: u8, constant_sampler: u8) -> Result<(), GpuCommandBuilderError>;
-    fn present_texture<Completion: CommandListCompletion>(&mut self, texture: u8, completion: &mut Completion, interrupt: bool) -> Result<(), GpuCommandBuilderError>;
+    fn present_texture(&mut self, texture: u8, completion: &mut Self::Completion, interrupt: bool) -> Result<(), GpuCommandBuilderError>;
     fn set_constant_sampler_f32(&mut self, constant_sampler: u8, color: [f32; 4]) -> Result<(), GpuCommandBuilderError>;
     fn set_constant_sampler_unorm8(&mut self, constant_sampler: u8, color: [u8; 4]) -> Result<(), GpuCommandBuilderError>;
     fn set_video_mode(&mut self, resolution: VideoResolution, backgrounds: bool, sprites: bool, triangles: bool) -> Result<(), GpuCommandBuilderError>;
@@ -77,9 +81,10 @@ pub trait GpuCommandBuilderExt: Sized {
     fn upload_buffer(&mut self, buffer: u8, data: *const u8) -> Result<(), GpuCommandBuilderError>;
     fn direct_blit(&mut self, src_tex: u8, dst_tex: u8, src_x: u16, src_y: u16, dst_x: u16, dst_y: u16, width: u16, height: u16) -> Result<(), GpuCommandBuilderError>;
     fn cutout_blit(&mut self, src_x: u8, src_y: u8, src_x: u16, src_y: u16, dst_x: u16, dst_y: u16, width: u16, height: u16, src_alpha_data_type: PixelDataType) -> Result<(), GpuCommandBuilderError>;
-    fn upload_shader(&mut self, index: u8, kind: ShaderKind, shader_code: &'static [u8]) -> Result<(), GpuCommandBuilderError>;
+    fn upload_shader(&mut self, index: u8, kind: ShaderKind, shader_code: *const u8, len: u32) -> Result<(), GpuCommandBuilderError>;
     fn upload_graphics_pipeline_state(&mut self, index: u8, /*flags: u8, */state: &'static GraphicsPipelineState) -> Result<(), GpuCommandBuilderError>;
     fn draw_graphics_pipeline(&mut self, index: u8, vertex_shader: u8, fragment_shader: u8, vertex_count: u32, clipping_rect: ClippingRect) -> Result<(), GpuCommandBuilderError>;
+    fn write_buffer(&mut self, buffer: u8, data: *const u8, length: u32, offset: u32) -> Result<(), GpuCommandBuilderError>;
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -87,7 +92,7 @@ pub enum GpuCommandBuilderError {
     OutOfSpace,
 }
 
-impl<D: CommandListData<GpuCommands>, Builder: CommandListBuilder<GpuCommands, Data = D>> GpuCommandBuilderExt for Builder {
+impl<'c, 'd, Builder: CommandListBuilder<'c, 'd, GpuCommands>> GpuCommandBuilderExt<'c, 'd> for Builder {
     fn clear_texture(&mut self, texture: u8, constant_sampler: u8) -> Result<(), GpuCommandBuilderError> {
         let data = &[
             0x00,
@@ -102,7 +107,7 @@ impl<D: CommandListData<GpuCommands>, Builder: CommandListBuilder<GpuCommands, D
 		}
     }
 
-    fn present_texture<Completion: CommandListCompletion>(&mut self, texture: u8, completion: &mut Completion, interrupt: bool) -> Result<(), GpuCommandBuilderError> {
+    fn present_texture(&mut self, texture: u8, completion: &mut Builder::Completion, interrupt: bool) -> Result<(), GpuCommandBuilderError> {
         let completion_flag_bytes = command_u32_bytes(unsafe { completion.raw_ptr() } as usize as u32);
         let data = &[
             0x01,
@@ -205,7 +210,9 @@ impl<D: CommandListData<GpuCommands>, Builder: CommandListBuilder<GpuCommands, D
         let flag_address_bytes = command_u32_bytes(flag_address);
         let value_bytes        = command_u32_bytes(value);
         let data = &[
-            0x02,
+            0x04,
+            0x00,
+            0x00,
             if interrupt { 0x01 } else { 0x00 },
             flag_address_bytes[0],
             flag_address_bytes[1],
@@ -267,7 +274,7 @@ impl<D: CommandListData<GpuCommands>, Builder: CommandListBuilder<GpuCommands, D
     }
 
     fn configure_buffer(&mut self, buffer: u8, length: u32) -> Result<(), GpuCommandBuilderError> {
-        let length_bytes = command_u32_bytes(length as usize as u32);
+        let length_bytes = command_u32_bytes(length);
         let data = &[
             0x07,
             0x00,
@@ -372,9 +379,9 @@ impl<D: CommandListData<GpuCommands>, Builder: CommandListBuilder<GpuCommands, D
 		}
     }
 
-    fn upload_shader(&mut self, index: u8, kind: ShaderKind, shader_code: &'static [u8]) -> Result<(), GpuCommandBuilderError> {
-        let size_bytes = command_u16_bytes(shader_code.len() as u16);
-        let address_bytes = command_u32_bytes(shader_code.as_ptr() as usize as u32);
+    fn upload_shader(&mut self, index: u8, kind: ShaderKind, shader_code: *const u8, len: u32) -> Result<(), GpuCommandBuilderError> {
+        let size_bytes = command_u16_bytes(len as u16);
+        let address_bytes = command_u32_bytes(shader_code as usize as u32);
         let data = &[
             0x0C,
             0x00,
@@ -454,13 +461,44 @@ impl<D: CommandListData<GpuCommands>, Builder: CommandListBuilder<GpuCommands, D
 			Ok(())
 		}
     }
+
+    fn write_buffer(&mut self, buffer: u8, data: *const u8, length: u32, offset: u32) -> Result<(), GpuCommandBuilderError> {
+        let data_address_bytes = command_u32_bytes(data as usize as u32);
+        let length_bytes = command_u32_bytes(length);
+        let offset_bytes = command_u32_bytes(offset);
+        let data = &[
+            0x10,
+            0x00,
+            0x00,
+            buffer,
+            data_address_bytes[0],
+            data_address_bytes[1],
+            data_address_bytes[2],
+            data_address_bytes[3],
+            length_bytes[0],
+            length_bytes[1],
+            length_bytes[2],
+            length_bytes[3],
+            offset_bytes[0],
+            offset_bytes[1],
+            offset_bytes[2],
+            offset_bytes[3],
+        ];
+        if !self.push_command(data) {
+			Err(GpuCommandBuilderError::OutOfSpace)
+		} else {
+			Ok(())
+		}
+    }
 }
 
 const GPU_COMMANDLIST_SUBMISSION_PORT: usize = 0x80010000;
 
-pub fn gpu_submit<'c, Completion: CommandListCompletion, CommandList: CommandListData<GpuCommands>>(command_list: &mut CommandList, completion: &mut Completion) {
+pub fn gpu_submit<'d, 'b: 'd, 'c: 'b, Completion: CommandListCompletion<'c>, CommandList: CommandListData<'d, GpuCommands>>(command_list: &mut CommandList, completion: &mut Completion) {
     unsafe {
-        (completion.raw_ptr()).write_volatile(0);
+        AtomicU32::from_ptr(completion.raw_ptr()).store(0, atomic::Ordering::Release);
+        let len = command_list.command_list_bytes().len();
+        command_list.command_list_bytes()[0..4].copy_from_slice(&command_u32_bytes((len - 8) as u32));
         command_list.command_list_bytes()[4..8].copy_from_slice(&command_u32_bytes(completion.raw_ptr() as usize as u32));
         core::ptr::write(GPU_COMMANDLIST_SUBMISSION_PORT as * mut u32, command_list.command_list_bytes().as_ptr() as usize as u32);
     }

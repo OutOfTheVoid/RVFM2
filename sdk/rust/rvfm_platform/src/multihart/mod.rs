@@ -9,6 +9,8 @@ pub mod critical_section;
 #[cfg(feature = "spinlock")]
 pub mod spinlock;
 
+pub mod hart_local;
+
 global_asm!(include_str!("trampoline.s"));
 
 extern "C" {

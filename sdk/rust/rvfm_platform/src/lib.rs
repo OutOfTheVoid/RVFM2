@@ -16,7 +16,7 @@ use debug::*;
 
 use core::panic::PanicInfo;
 
-use crate as rvfm_platform;
+pub(crate) use crate as rvfm_platform;
 
 #[panic_handler]
 fn panic_handler(panic_info: &PanicInfo) -> ! {

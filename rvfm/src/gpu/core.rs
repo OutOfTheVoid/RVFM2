@@ -1,4 +1,5 @@
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use bytemuck::{Pod, cast_slice, cast_slice_mut};
@@ -18,7 +19,7 @@ use super::buffer::*;
 use super::types::{ConstantSampler, VideoMode, PixelDataLayout, ImageDataLayout, PixelDataType, ColorBlendOp, AlphaBlendOp};
 
 pub struct Core {
-    command_lists:      Vec<CommandList>,
+    command_lists:      VecDeque<CommandList>,
     video_mode:         VideoMode,
     constant_samplers:  [ConstantSampler;       64],
     textures:           [TextureModule;         64],
@@ -34,7 +35,7 @@ pub struct Core {
 impl Core {
     pub fn new() -> Self {
         Self {
-            command_lists: Vec::new(),
+            command_lists: VecDeque::new(),
             video_mode: VideoMode { resolution: super::types::VideoResolution::V256x192, backgrounds: false, sprites: false, triangles: false },
             constant_samplers: [(); 64].map(|_| ConstantSampler::new()),
             textures: [(); 64].map(|_| TextureModule::new()),
@@ -48,11 +49,11 @@ impl Core {
     }
 
     pub fn add_command_list(&mut self, list: CommandList) {
-        self.command_lists.push(list);
+        self.command_lists.push_back(list);
     }
 
     pub fn process(&mut self, machine: &Arc<Machine>, main_window: &MainWindow) {
-        while let Some(command_list) = self.command_lists.pop() {
+        while let Some(command_list) = self.command_lists.pop_front() {
             self.execute_command_list(command_list, machine, main_window);
         }
     }
@@ -64,6 +65,7 @@ impl Core {
                 self.execute_command(command, machine, main_window);
                 offset = new_offset;
             } else {
+                println!("command parse failed!");
                 // todo: Set an error when we find an invalid command
                 // for now, just skip the rest of the offending command list
                 break;
@@ -109,8 +111,10 @@ impl Core {
                     upper_left:  (x_low  as u32, y_low  as u32),
                     lower_right: (x_high as u32, y_high as u32),
                 };
-                self.draw_graphics_pipeline(state_index, vertex_shader, fragment_shader, vertex_count, target_rect)
+                self.draw_graphics_pipeline(state_index, vertex_shader, fragment_shader, vertex_count, target_rect);
             },
+            Command::WriteBuffer { buffer, src_addr, length, offset } => 
+                self.write_buffer(buffer, src_addr, length, offset, machine),
         }
     }
 
@@ -209,6 +213,7 @@ impl Core {
     }
 
     fn configure_buffer(&mut self, buffer: u8, length: u32) {
+        println!("GPU: configure_buffer(buffer: {buffer}, buffer_length: {:08X}", length);
         self.buffers[buffer as usize].length = length.min(BUFFER_MAX_SIZE);
     }
 
@@ -464,6 +469,20 @@ impl Core {
             resource_map: &state.raster_state.resource_map,
         };
         run_rasterizer(rasterizer_call);
+    }
+
+    fn write_buffer(&mut self, buffer: u8, src_addr: u32, length: u32, offset: u32, machine: &Arc<Machine>) {
+        let buffer_slice = self.buffers[buffer as usize].bytes_mut();
+        println!("GPU: write_buffer(buffer: {}, src_addr: {:08X}, length: {:X}, offset: {:08X})", buffer, src_addr, length, offset);
+        if (offset + length) as usize > buffer_slice.len() {
+            println!("buffer write overflows buffer!");
+            return;
+        }
+        std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel);
+        match machine.read_block(src_addr, &mut buffer_slice[offset as usize..(offset + length) as usize]) {
+            ReadResult::Ok(_) => {},
+            ReadResult::InvalidAddress => println!("invalid data address address!"),
+        }
     }
 }
 

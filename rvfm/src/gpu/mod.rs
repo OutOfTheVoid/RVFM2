@@ -55,7 +55,7 @@ fn gpu_thread(queue: Receiver<(u32, u32)>, machine: Arc<Machine>, main_window: M
         };
         'receive: loop {
             match queue.try_recv() {
-                Ok((queue_index, commandlist_addr)) => {
+                Ok((_queue_index, commandlist_addr)) => {
                     match parse_commandlist_header(commandlist_addr, &machine) {
                         Ok(command_list) => {
                             core.add_command_list(command_list);

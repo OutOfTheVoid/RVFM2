@@ -3,6 +3,7 @@ use bytemuck::cast_slice_mut;
 use super::{shader::ShaderType, types::*};
 use crate::command_list::CommandList;
 
+#[derive(Debug)]
 pub enum Command {
     /*
     clear_texture <texture> <c. sampler>
@@ -168,11 +169,23 @@ pub enum Command {
         y_low: u16,
         y_high: u16
     },
+
+    /*
+    write_buffer   ..    <buffer> <   src_addr   > <    length   > <    offset   >
+    [     10 00 ] [ 00 ] [   XX ] [  YY YY YY YY ] [ LL LL LL LL ] [ OO OO OO OO ]
+     */
+    WriteBuffer {
+        buffer: u8,
+        src_addr: u32,
+        length: u32,
+        offset: u32,
+    },
 }
 
 impl Command {
     pub fn read(command_list: &CommandList, offset: u32) -> Option<(u32, Self)> {
-        match command_list.read_u16(offset) {
+        let opcode = command_list.read_u16(offset);
+        match opcode {
             Some(0x00_00) => {
                 let texture = command_list.read_u8(offset + 2)? & 0x1F;
                 let constant_sampler = command_list.read_u8(offset + 3)? & 0x3F;
@@ -320,7 +333,18 @@ impl Command {
                 let y_low = command_list.read_u16(offset + 16)?;
                 let y_high = command_list.read_u16(offset + 18)?;
                 Some((offset + 20, Command::DrawGraphicsPipeline { state_index, vertex_count, fragment_shader, vertex_shader, x_low, x_high, y_low, y_high }))
-            }
+            },
+            /*
+            write_buffer   ..    <buffer> <   src_addr   > <    length   > <    offset   >
+            [     10 00 ] [ 00 ] [   XX ] [  YY YY YY YY ] [ LL LL LL LL ] [ OO OO OO OO ]
+            */
+            Some(0x00_10) => {
+                let buffer = command_list.read_u8(offset + 3)?;
+                let src_addr = command_list.read_u32(offset + 4)?;
+                let length = command_list.read_u32(offset + 8)?;
+                let buffer_offset = command_list.read_u32(offset + 12)?;
+                Some((offset + 16, Command::WriteBuffer { buffer, src_addr, length, offset: buffer_offset }))
+            },
             _  => None,
         }
     }
