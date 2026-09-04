@@ -2,7 +2,7 @@ use core::sync::atomic::AtomicUsize;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use rvfm_platform::{command_list::{CommandListBuilder, CommandListCompletion}, gpu::GpuCommandBuilderExt};
 
-use crate::{command_list_internal::{CommandListBuilderInternal, CommandListInternal, CompletionInternal}, constant_sampler::ConstantSampler, fence::Fence, texture, Buffer, Shader, Texture};
+use crate::{command_list_internal::{CommandListBuilderInternal, CommandListInternal, CompletionInternal}, constant_sampler::ConstantSampler, fence::{Fence, FenceWait}, texture, Buffer, Shader, Texture};
 
 pub enum CommandResource {
     Fence(Fence),
@@ -83,6 +83,7 @@ impl CommandBuilder {
             list_internal: self.builder_internal.finish(),
             dependencies: self.resources.into_boxed_slice(),
             submission_completion: None,
+            run_fence: None,
         }
     }
 }
@@ -91,6 +92,7 @@ pub struct CommandBuffer {
     pub(crate) list_internal: CommandListInternal,
     pub(crate) dependencies: Box<[CommandResource]>,
     pub(crate) submission_completion: Option<CompletionInternal>,
+    pub(crate) run_fence: Option<FenceWait>
 }
 
 impl CommandBuffer {

@@ -60,11 +60,13 @@ pub enum CommandListHeaderError {
 }
 
 pub fn parse_commandlist_header(commandlist_addr: u32, machine: &Arc<Machine>) -> Result<CommandList, CommandListHeaderError> {
+    println!("parse_commandlist_header: {:08x}", commandlist_addr);
     if !Machine::ADDRESS_RANGE_RAM.contains(&commandlist_addr) || !Machine::ADDRESS_RANGE_RAM.contains(&(commandlist_addr + 8)) {
         return Err(CommandListHeaderError::HeaderNotInRam);
     }
     std::sync::atomic::fence(std::sync::atomic::Ordering::AcqRel);
     let list_len = machine.read_u32_unaligned(commandlist_addr).unwrap();
+    println!("list_len: {}", list_len);
     let transfer_completion_flag = machine.read_u32_unaligned(commandlist_addr + 4).unwrap();
 
     if list_len > MAX_COMMANDLIST_LEN {

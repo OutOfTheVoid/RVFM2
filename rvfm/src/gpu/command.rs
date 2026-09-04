@@ -185,6 +185,7 @@ pub enum Command {
 impl Command {
     pub fn read(command_list: &CommandList, offset: u32) -> Option<(u32, Self)> {
         let opcode = command_list.read_u16(offset);
+        println!("GPU OPCODE: {:04x}", opcode.unwrap_or(0));
         match opcode {
             Some(0x00_00) => {
                 let texture = command_list.read_u8(offset + 2)? & 0x1F;
@@ -332,6 +333,7 @@ impl Command {
                 let x_high = command_list.read_u16(offset + 14)?;
                 let y_low = command_list.read_u16(offset + 16)?;
                 let y_high = command_list.read_u16(offset + 18)?;
+                println!("dgp");
                 Some((offset + 20, Command::DrawGraphicsPipeline { state_index, vertex_count, fragment_shader, vertex_shader, x_low, x_high, y_low, y_high }))
             },
             /*

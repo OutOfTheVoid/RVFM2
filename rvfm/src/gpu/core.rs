@@ -61,7 +61,9 @@ impl Core {
     fn execute_command_list(&mut self, command_list: CommandList, machine: &Arc<Machine>, main_window: &MainWindow) {
         let mut offset = 0;
         while (offset as usize) < command_list.len() {
+            println!("command_list len: {}, offset: ", command_list.len());
             if let Some((new_offset, command)) = Command::read(&command_list, offset) {
+                println!("executing command at: {}", offset + 8);
                 self.execute_command(command, machine, main_window);
                 offset = new_offset;
             } else {
@@ -451,6 +453,7 @@ impl Core {
     }
 
     fn draw_graphics_pipeline(&mut self, state: u8, vertex_shader: u8, fragment_shader: u8, vertex_count: u32, target_rect: RasterRect) {
+        println!("GPU: draw_graphics_pipeline(state: {}, vertex_shader: {}, fragment_shader: {}, vertex_count: {}, target_rect: {:?})", state, vertex_shader, fragment_shader, vertex_count, target_rect);
         let state = &self.graphics_states[state as usize];
         let rasterizer_call = RasterizerCall {
             constant_array: &mut self.shader_constants,

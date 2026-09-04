@@ -1,4 +1,4 @@
-#![feature(new_uninit)]
+#![feature(new_zeroed_alloc)]
 
 use config::Config;
 use hart::{StepState, Hart};

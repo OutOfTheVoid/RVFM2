@@ -112,7 +112,6 @@ impl RasterizerState {
         let texture_mapping_array_address = machine.read_u32(address + 12).to_opt()?;
         let varying_count = machine.read_u8(address + 16).to_opt()?;
         let constant_count = machine.read_u8(address + 17).to_opt()?;
-        println!("RasterizerState::read_from_address(): constant_count = {constant_count}, constant_array_address: {:08X}", constant_array_address);
         let buffer_mapping_count = machine.read_u8(address + 18).to_opt()?;
         let texture_mapping_count = machine.read_u8(address + 19).to_opt()?;
         let mut varyings = Vec::new();

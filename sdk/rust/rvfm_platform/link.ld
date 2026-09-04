@@ -36,4 +36,5 @@ SECTIONS
 
     PROVIDE( __stack_ptr      = ORIGIN(RAM) + LENGTH(RAM) );
     PROVIDE( __global_pointer = 0x800                     );
+    PROVIDE( __global_pointer$ = 0x800                     );
 }

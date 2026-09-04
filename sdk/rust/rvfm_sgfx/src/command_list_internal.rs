@@ -56,6 +56,10 @@ impl command_list::CommandListBuilder<'static, 'static, GpuCommands> for Command
             command_bytes: Box::into_pin(bytes)
         }
     }
+
+    fn length(&self) -> u32 {
+        self.command_bytes.len() as u32
+    }
 }
 
 impl CommandListBuilderInternal {

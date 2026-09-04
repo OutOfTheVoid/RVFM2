@@ -20,10 +20,10 @@ void main() {
 
     spu_command_set_mix(&recorder, 0, false, 20000);
     spu_command_set_mix(&recorder, 0, true, 20000);
-    spu_command_pitch_set_mode(&recorder, 0, PitchModeConstant);
+    spu_command_pitch_set_mode(&recorder, 0, PitchModePortamentoQuadratic);
     spu_command_oscillator_set_waveform(&recorder, 0, WaveformSquare);
-    spu_command_envelope_set_attack(&recorder, 0, 400);
-    spu_command_envelope_set_decay(&recorder, 0, 400);
+    spu_command_envelope_set_attack(&recorder, 0, 4000);
+    spu_command_envelope_set_decay(&recorder, 0, 4000);
     spu_command_envelope_set_sustain(&recorder, 0, 0x4000);
     spu_command_envelope_set_release(&recorder, 0, 0);
 
@@ -82,7 +82,7 @@ void main() {
     debug_print("submitting command list...");
 
     volatile u32 spu_submission_completion = 0;
-    spu_submit_commandlist(SpuQueue0, &spu_submission_completion, &spu_submission_completion);
+    spu_submit_commandlist(SpuQueue0, command_list, &spu_submission_completion);
 
     debug_print("command list submission called!");
 

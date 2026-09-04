@@ -46,6 +46,7 @@ extern "C" fn main() {
     command_builder.present_texture(&texture, &mut present_fence);
     let mut command_buffer = command_builder.build();
     instance.submit_command_buffer(&mut command_buffer);
+    drop(command_buffer);
 
     loop {
         wfi();

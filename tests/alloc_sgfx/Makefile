@@ -13,6 +13,8 @@ SRC_DIR = $(SELF_DIR)src
 TARGET_DIR = $(SELF_DIR)bin
 CARGO_TARGET_DIR = $(SELF_DIR)target/riscv32ima-unknown-none-elf
 
+LD_SCRIPT = ../../sdk/link/link.ld
+
 TARGET_NAME = alloc_sgfx
 TARGET_ELF = $(TARGET_NAME).bin.elf
 TARGET = $(TARGET_NAME).bin

@@ -54,12 +54,14 @@ fn debug_push(machine: &Arc<Machine>, addr: u32, length: u32) {
             let byte_addr = addr.wrapping_add(i);
             if Machine::ADDRESS_RANGE_DBG.contains(&byte_addr) {
                 DEBUG_REGS.with(|r| r.borrow_mut().status = DEBUG_STATUS_CODE_ERROR_MEM);
+                buffer.clear();
                 return;
             }
             let byte = match machine.read_u8(byte_addr) {
                 ReadResult::Ok(byte) => byte,
                 _ => {
                     DEBUG_REGS.with(|r| r.borrow_mut().status = DEBUG_STATUS_CODE_ERROR_MEM);
+                    buffer.clear();
                     return;
                 },
             };
@@ -79,6 +81,7 @@ fn debug_print() {
                 DEBUG_REGS.with(|r| r.borrow_mut().status = DEBUG_STATUS_CODE_OK);
             },
             _ => {
+                println!("DEBUG UTF8 ERROR!");
                 DEBUG_REGS.with(|r| r.borrow_mut().status = DEBUG_STATUS_CODE_ERROR_UTF);
             }
         }
@@ -88,8 +91,8 @@ fn debug_print() {
 pub fn debug_read_u32(_machine: &Arc<Machine>, offset: u32) -> ReadResult<u32> {
     match offset {
         0  => ReadResult::Ok(DEBUG_REGS.with(|r| r.borrow().length)),
-        4  => ReadResult::Ok(DEBUG_REGS.with(|r| r.borrow().length)),
-        8  => ReadResult::Ok(DEBUG_REGS.with(|r| r.borrow().length)),
+        4  => ReadResult::Ok(DEBUG_REGS.with(|r| r.borrow().message_addr)),
+        8  => ReadResult::Ok(DEBUG_REGS.with(|r| r.borrow().status)),
         12 => ReadResult::Ok(0),
         16 => ReadResult::Ok(0),
         _  => ReadResult::InvalidAddress

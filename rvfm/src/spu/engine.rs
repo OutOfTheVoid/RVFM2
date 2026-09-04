@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
-use crate::machine::Machine;
+use crate::{machine::Machine, spu::lfo::LfoCommand};
 
 use super::{sampler::*, command::*, envelope::*, filter::{Filter, FilterCommand}, oscillator::*, pitch::PitchCommand, voice::{Voice, VoiceCommand}, SAMPLE_RATE_16000};
 
 pub struct Engine {
     voices: [Voice; 16],
-    envelopes: [Envelope; 16],
+    voice_envelopes: [Envelope; 16],
+    filter_envelopes: [Envelope; 16],
     samplers: [Sampler; 32],
     mix_coefficients: [(i16, i16); 48],
 }
@@ -15,7 +16,8 @@ impl Default for Engine {
     fn default() -> Self {
         Self {
             voices: [(); 16].map(|_| Voice::default()),
-            envelopes: [(); 16].map(|_| Envelope::default()),
+            voice_envelopes: [(); 16].map(|_| Envelope::default()),
+            filter_envelopes: [(); 16].map(|_| Envelope::default()),
             mix_coefficients: [(0, 0); 48],
             samplers: [(); 32].map(|_| Sampler::new()),
         }
@@ -37,14 +39,15 @@ impl Engine {
     pub fn process(&mut self, dt: f32, machine: &Arc<Machine>) -> (i16, i16) {
         let mut sample = (0, 0);
         for v in 0..=15 {
-            let envelope_scale = self.envelopes[v].process();
+            let envelope_scale = self.voice_envelopes[v].process();
+            let filter_envelope_scale = self.filter_envelopes[v].process().unwrap_or(0) as f32 / 32768.0;
             match envelope_scale {
                 Some(x) => {
                     let (yl, yr) = self.mix_coefficients[v as usize];
                     let (yl, yr) = (fixed_to_float(yl), fixed_to_float(yr));
                     let x = fixed_to_float(x);
                     let x = x * x; // give the envelope exponential scaling to linearly map volume
-                    let a = self.voices[v].process(dt);
+                    let a = self.voices[v].process(dt, filter_envelope_scale);
                     let ax = a * x;
                     sample.0 += float_to_fixed(yl * ax);
                     sample.1 += float_to_fixed(yr * ax);
@@ -63,8 +66,19 @@ impl Engine {
 
     pub fn envelope_command(&mut self, target: u8, command: EnvelopeCommand) {
         match target {
-            0..=15 => self.envelopes[target as usize].send_command(command),
-            0xFF => self.envelopes.iter_mut().for_each(|e| e.send_command(command)),
+             0..=15 => self.voice_envelopes [target as usize     ].send_command(command),
+            16..=31 => self.filter_envelopes[target as usize % 16].send_command(command),
+            32..=47 => {
+                let index = target as usize % 16;
+                self.voice_envelopes[index].send_command(command);
+                self.filter_envelopes[index].send_command(command);
+            },
+            0xFF => {
+                self.voice_envelopes.iter_mut().for_each(|e| e.send_command(command));
+                self.filter_envelopes.iter_mut().for_each(|e| e.send_command(command));
+            },
+            0xFE => self.voice_envelopes.iter_mut().for_each(|e| e.send_command(command)),
+            0xFD => self.filter_envelopes.iter_mut().for_each(|e| e.send_command(command)),
             _ => {}
         }
     }
@@ -97,6 +111,15 @@ impl Engine {
         match target {
             0..=31 => self.samplers[target as usize].send_command(command),
             0xFF => self.samplers.iter_mut().for_each(|s| s.send_command(command)),
+            _ => {}
+        }
+    }
+
+    pub fn lfo_command(&mut self, target: u8, command: LfoCommand) {
+        let target_voice = target >> 2;
+        match target_voice {
+            0..=15 => self.voices[target_voice as usize].send_command(VoiceCommand::Lfo(command, (target & 3) as usize)),
+            0x3F => self.voices.iter_mut().for_each(|voice| voice.send_command(VoiceCommand::Lfo(command, (target & 3) as usize))),
             _ => {}
         }
     }

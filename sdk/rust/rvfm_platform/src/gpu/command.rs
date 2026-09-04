@@ -1,9 +1,8 @@
 use core::sync::atomic::{self, AtomicU32};
+use crate::debug::*;
 
 use crate::command_list::*;
 use super::pipeline_state::GraphicsPipelineState;
-use crate::debug::println;
-use crate::rvfm_platform;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VideoResolution {
@@ -497,9 +496,9 @@ const GPU_COMMANDLIST_SUBMISSION_PORT: usize = 0x80010000;
 pub fn gpu_submit<'d, 'b: 'd, 'c: 'b, Completion: CommandListCompletion<'c>, CommandList: CommandListData<'d, GpuCommands>>(command_list: &mut CommandList, completion: &mut Completion) {
     unsafe {
         AtomicU32::from_ptr(completion.raw_ptr()).store(0, atomic::Ordering::Release);
-        let len = command_list.command_list_bytes().len();
-        command_list.command_list_bytes()[0..4].copy_from_slice(&command_u32_bytes((len - 8) as u32));
         command_list.command_list_bytes()[4..8].copy_from_slice(&command_u32_bytes(completion.raw_ptr() as usize as u32));
+        crate::debug::println!("gpu_submit: list length: {:08X}", *(command_list.command_list_bytes().as_ptr() as *const u8 as *const u32));
+        crate::debug::flush();
         core::ptr::write(GPU_COMMANDLIST_SUBMISSION_PORT as * mut u32, command_list.command_list_bytes().as_ptr() as usize as u32);
     }
 }

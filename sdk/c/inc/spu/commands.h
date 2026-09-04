@@ -26,21 +26,11 @@ typedef enum {
 } Waveform;
 
 typedef enum {
-    FilterModeAllPass = 0,
-    LowPass6          = 1,
-    LowPass12         = 2,
-    LowPass18         = 3,
-    LowPass24         = 4,
-
-    HighPass6         = 5,
-    HighPass12        = 6,
-    HighPass18        = 7,
-    HighPass24        = 8,
-
-    BandPass6         = 9,
-    BandPass12        = 10,
-    BandPass18        = 11,
-    BandPass24        = 12,
+    Muted    = 0,
+    Lowpass  = 1,
+    BandPass = 2,
+    HighPass = 3,
+    AllPass  = 4,
 } FilterMode;
 
 typedef enum {
@@ -59,6 +49,10 @@ typedef enum {
     SpuQueue2 = 2,
     SpuQueue3 = 3,
 } SpuQueue;
+
+#define VOICE_ENVELOPE(n) n
+#define FILTER_ENVELOPE(n) ((n | 16))
+#define VOICE_AND_FILTER_ENVELOPE(n) ((n | 32))
 
 inline static bool spu_command_reset_sample_counter(CommandListRecorder * recorder, u32 reset_value) {
     u8 data[] = {
@@ -220,12 +214,43 @@ inline static bool spu_command_filter_set_mode(CommandListRecorder * recorder, u
     return PUSH_COMMAND;
 }
 
-inline static bool spu_command_filter_set_resonance(CommandListRecorder * recorder, u8 filter, u16 resonance) {
+inline static bool spu_command_filter_set_q(CommandListRecorder * recorder, u8 filter, u16 q) {
     u8 data[] = {
         0x0A,
         filter,
         0x01,
-        COMMAND_ENCODED_U16(resonance)
+        COMMAND_ENCODED_U16(q)
+    };
+    return PUSH_COMMAND;
+}
+
+inline static bool spu_command_filter_set_cutoff_fixed(CommandListRecorder * recorder, u8 filter, u16 cutoff) {
+    u8 data[] = {
+        0x0A,
+        filter,
+        0x02,
+        COMMAND_ENCODED_U16(cutoff)
+    };
+    return PUSH_COMMAND;
+}
+
+inline static bool spu_command_filter_set_cutoff_pitch_scaled(CommandListRecorder * recorder, u8 filter, u16 scale) {
+    u8 data[] = {
+        0x0A,
+        filter,
+        0x03,
+        COMMAND_ENCODED_U16(scale)
+    };
+    return PUSH_COMMAND;
+}
+
+inline static bool spu_command_filter_set_cutoff_pitch_scaled_enveloped(CommandListRecorder * recorder, u8 filter, u16 scale_low, u16 scale_high) {
+    u8 data[] = {
+        0x0A,
+        filter,
+        0x04,
+        COMMAND_ENCODED_U16(scale_low),
+        COMMAND_ENCODED_U16(scale_high)
     };
     return PUSH_COMMAND;
 }

@@ -63,6 +63,7 @@ pub struct RasterizerState {
     pub resource_map: ResourceMap,
 }
 
+#[derive(Debug, Clone, Default)]
 pub struct RasterRect {
     pub upper_left  : (u32, u32),
     pub lower_right : (u32, u32),

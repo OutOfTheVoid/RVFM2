@@ -70,18 +70,16 @@ macro_rules! __println__ {
     () => {
         {
             use core::fmt::Write;
-            use rvfm_platform;
-            let _ = rvfm_platform::debug::write_str("\n");
-            rvfm_platform::debug::flush();
+            let _ = write_str("\n");
+            flush();
         }
     };
     ($($arg:tt)*) => {
         {
             use core::fmt::Write;
-            use rvfm_platform;
-            let mut writer = rvfm_platform::debug::DebugWriter;
+            let mut writer = DebugWriter::new();
             let _ = write!(&mut writer, $($arg)*);
-            rvfm_platform::debug::flush();
+            flush();
         }
     };
 }

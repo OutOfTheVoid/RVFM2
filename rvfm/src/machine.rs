@@ -111,6 +111,7 @@ impl Machine {
     pub const ADDRESS_RANGE_ROM: RangeInclusive<u32> = 0xF800_0000 ..= 0xFFFF_FFFF;
 
     pub fn new(rom_data: &[u8], main_window: MainWindow) -> (Arc<Self>, MachineMainThread) {
+        unsafe { println!("rom data bytes:\n{:02x}\n{:02x}\n{:02x}\n{:02x}", rom_data[0], rom_data[1], rom_data[2], rom_data[3]); }
         let ram = Box::leak(vec![0u8; 0x800_0000].into_boxed_slice()).as_mut_ptr();
         let rom = Box::leak(vec![0u8; 0x800_0000].into_boxed_slice()).as_mut_ptr();
         let mut atomic_reservations = Vec::new();
@@ -122,6 +123,7 @@ impl Machine {
             rom,
             atomic_reservations
         });
+        unsafe { println!("rom bytes:\n{:02x}\n{:02x}\n{:02x}\n{:02x}", *rom.add(0), *rom.add(1), *rom.add(2), *rom.add(3)); }
         gpu_init(&machine, main_window);
         let spu_stream = spu_init(&machine);
         let machine_main_thread = MachineMainThread {

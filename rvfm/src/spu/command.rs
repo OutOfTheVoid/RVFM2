@@ -1,6 +1,6 @@
 use std::{iter::Filter, sync::Arc};
 
-use crate::machine::{Machine, ReadResult};
+use crate::{machine::{Machine, ReadResult}, spu::lfo::{self, LfoCommand}};
 
 use super::{super::command_list::CommandList, envelope::EnvelopeCommand, filter::{FilterCommand, FilterMode}, oscillator::{OscillatorCommand, Waveform}, pitch::{PitchCommand, PitchMode}, sampler::{LoopMode, SamplerCommand}};
 
@@ -21,6 +21,8 @@ pub const SPU_COMMAND_NOTE_ON                : u8 = 0x0E;
 pub const SPU_COMMAND_RELWAIT_SAMPLE_COUNTER : u8 = 0x0F;
 pub const SPU_COMMAND_SAMPLER_PARAM          : u8 = 0x10;
 pub const SPU_COMMAND_SAMPLER_COMMAND        : u8 = 0x11;
+pub const SPU_COMMAND_LFO_COMMAND            : u8 = 0x12;
+pub const SPU_COMMAND_LFO_PARAM              : u8 = 0x13;
 
 #[derive(Debug)]
 pub enum SpuCommand {
@@ -67,6 +69,10 @@ pub enum SpuCommand {
         target: u8,
         sampler_command: SamplerCommand,
     },
+    Lfo {
+        target: u8,
+        lfo_command: LfoCommand,
+    }
 }
 
 impl SpuCommand {
@@ -156,7 +162,10 @@ impl SpuCommand {
                     let target = command_list.read_u8(offset + 1)?;
                     let (param_bytes, filter_command) = match command_list.read_u8(offset + 2)? {
                         0 => (1, FilterCommand::SetMode(FilterMode::from_u32(command_list.read_u8(offset + 3)? as u32))),
-                        1 => (2, FilterCommand::SetResonance(command_list.read_u16(offset + 3)?)),
+                        1 => (2, FilterCommand::SetQ(command_list.read_u16(offset + 3)?)),
+                        2 => (2, FilterCommand::SetCutoff(super::filter::CutoffMode::FixedFrequency(command_list.read_u16(offset + 3)?))),
+                        3 => (2, FilterCommand::SetCutoff(super::filter::CutoffMode::PitchScaled(command_list.read_u16(offset + 3)?))),
+                        4 => (4, FilterCommand::SetCutoff(super::filter::CutoffMode::PitchScaledEnvelope(command_list.read_u16(offset + 3)?, command_list.read_u16(offset + 5)?))),
                         _ => None?
                     };
                     (offset + 3 + param_bytes, SpuCommand::Filter {
@@ -253,6 +262,32 @@ impl SpuCommand {
                         sampler_command
                     })
                 },
+                SPU_COMMAND_LFO_COMMAND => {
+                    let target = command_list.read_u8(offset + 1)?;
+                    let subcommand = command_list.read_u8(offset + 2)?;
+                    let lfo_command = match subcommand {
+                        0 => LfoCommand::Reset,
+                        _ => None?
+                    };
+                    (offset + 3, SpuCommand::Lfo { lfo_command, target })
+                },
+                SPU_COMMAND_LFO_PARAM => {
+                    let target = command_list.read_u8(offset + 1)?;
+                    let param = command_list.read_u8(offset + 2)?;
+                    let (param_bytes, lfo_command) = match param {
+                        0 => {
+                            let waveform = lfo::Waveform::from_u8(command_list.read_u8(offset + 3)?)?;
+                            (1, LfoCommand::SetWaveform(waveform))
+                        },
+                        1 => (2, LfoCommand::SetSpeed(command_list.read_u16(offset + 3)?)),
+                        2 => (2, LfoCommand::SetOffset(command_list.read_u16(offset + 3)?)),
+                        _ => None?
+                    };
+                    (offset + 3 + param_bytes, SpuCommand::Lfo {
+                        lfo_command,
+                        target
+                    })
+                }
                 _ => None?,
             }
         )

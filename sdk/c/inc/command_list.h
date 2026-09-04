@@ -27,6 +27,9 @@ static inline void init_commandlist_recorder(CommandListRecorder * recorder, Mem
 
 static inline CommandList finish_commandlist_recorder(CommandListRecorder * recorder) {
     recorder->header->length = recorder->length;
+    debug_print("finish_commandlist_recorder - command list length: ");
+    debug_print_u32_hex(recorder->header->length);
+    debug_flush();
     return recorder->header;
 }
 

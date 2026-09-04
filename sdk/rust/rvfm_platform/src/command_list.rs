@@ -8,6 +8,7 @@ pub trait CommandListBuilder<'c, 'd, Commands>: Sized {
 
     fn push_command(&mut self, command_bytes: &[u8]) -> bool;
     fn finish(self) -> Self::Data;
+    fn length(&self) -> u32;
 }
 
 pub trait CommandListData<'d, Command>: Sized {
@@ -48,7 +49,7 @@ pub trait CommandListCompletion<'c>: Sized {
     }
 }
 
-pub struct StaticCommandList<'a, Commands>(pub(crate) &'a mut [u8], PhantomData<Commands>);
+pub struct StaticCommandList<'a, Commands>(pub &'a mut [u8], PhantomData<Commands>);
 
 impl<'d, Commands> CommandListData<'d, Commands> for StaticCommandList<'d, Commands> {
     fn command_list_bytes(&mut self) -> &mut [u8] {
@@ -106,8 +107,12 @@ impl<'c, 'd, Commands> CommandListBuilder<'c, 'd, Commands> for StaticCommandLis
     }
 
     fn finish(self) -> Self::Data {
-        self.buffer[0..4].copy_from_slice(&command_u32_bytes((self.offset - 8) as u32));
+        self.buffer[0..4].copy_from_slice(&command_u32_bytes(self.offset as u32 - 8));
         StaticCommandList(self.buffer, PhantomData)
+    }
+
+    fn length(&self) -> u32 {
+        self.offset as u32
     }
 }
 

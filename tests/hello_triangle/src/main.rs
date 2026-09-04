@@ -26,14 +26,14 @@ const VERTEX_SHADER   : &'static [u8] = include_bytes!("../bin/vshader.bin");
 const FRAGMENT_SHADER : &'static [u8] = include_bytes!("../bin/fshader.bin");
 
 const VERTEX_DATA: &'static [f32] = &[
-    0.0, -0.5,  0.0,
-    1.0,  0.0,  1.0,
+    0.0, 0.5, 0.0,
+    1.0,  0.0,  0.0,
 
-    -0.5,  0.5,  0.0,
-    1.0,  1.0,  0.0,
+    0.4330127, -0.25000003, 0.0,
+    0.0,  1.0,  0.0,
 
-    0.5,  0.5,  0.0,
-    0.0,  1.0,  1.0,
+    -0.43301272, -0.24999996, 0.0,
+    0.0,  0.0,  1.0,
 ];
 
 #[repr(C, align(4))]
@@ -147,28 +147,32 @@ fn build_commandlist<'a, 'c: 'a>(command_list_bytes: &'a mut [u8], constant_data
     present_completion.reset(0);
 
     let mut builder = StaticCommandListBuilder::new(command_list_bytes);
-    builder.set_video_mode(VideoResolution::R512x384, true, true, true)?;
+    builder.set_video_mode                (VideoResolution::R512x384, true, true, true)?;
     builder.configure_buffer              (VERTEX_BUFFER_ID,         VERTEX_DATA.len() as u32 * core::mem::size_of::<f32>() as u32)?;
     builder.upload_buffer                 (VERTEX_BUFFER_ID,         VERTEX_DATA.as_ptr() as *const u8)?;
     builder.configure_buffer              (CONSTANT_BUFFER_ID,       core::mem::size_of::<ConstantData>() as u32)?;
     builder.upload_buffer                 (CONSTANT_BUFFER_ID,       constant_data as *const _ as *const u8)?;
-    
+
     builder.configure_texture             (RENDER_TEXTURE_ID,        &texture_config)?;
     
-    builder.upload_shader                 (VERTEX_SHADER_ID,         ShaderKind::Vertex, VERTEX_SHADER)?;
-    builder.upload_shader                 (FRAGMENT_SHADER_ID,       ShaderKind::Fragment, FRAGMENT_SHADER)?;
+    builder.upload_shader                 (VERTEX_SHADER_ID,         ShaderKind::Vertex, VERTEX_SHADER.as_ptr(), VERTEX_SHADER.len() as u32)?;
+    builder.upload_shader                 (FRAGMENT_SHADER_ID,       ShaderKind::Fragment, FRAGMENT_SHADER.as_ptr(), FRAGMENT_SHADER.len() as u32)?;
     builder.upload_graphics_pipeline_state(PIPELINE_STATE_ID,         &PIPELINE_STATE)?;
-        
+    
     builder.set_constant_sampler_unorm8   (CLEAR_CONSTANT_SAMPLER_ID, [0, 0, 0, 255])?;
     builder.clear_texture                 (RENDER_TEXTURE_ID,         CLEAR_CONSTANT_SAMPLER_ID)?;
     builder.draw_graphics_pipeline        (PIPELINE_STATE_ID,         VERTEX_SHADER_ID, FRAGMENT_SHADER_ID, 3, clipping_rect)?;
     builder.present_texture               (RENDER_TEXTURE_ID,         present_completion, false)?;
+
     let command_list = builder.finish();
     Ok(command_list)
 }
 
 #[no_mangle]
 extern "C" fn main() {
+    println!("hello_triangle!");
+    flush();
+
     let mut command_list_bytes = [0u8; 1024];
     let mut angle = 0.0;
     let mut constant_data = ConstantData {
@@ -180,12 +184,15 @@ extern "C" fn main() {
     let mut submit_completion = StaticCommandListCompletion::new(&submit_completion_variable);
     let mut present_completion = StaticCommandListCompletion::new(&present_completion_variable);
     let mut command_list = build_commandlist(&mut command_list_bytes[..], &constant_data, &mut present_completion).unwrap();
+
     loop {
         angle += 0.01;
         constant_data.transform_matrix = Mat4::from_rotation_z(angle).to_cols_array();
         {
             present_completion.reset(0);
+            submit_completion.reset(0);
             gpu_submit(&mut command_list, &mut submit_completion);
+            flush();
             submit_completion.wait_nonzero();
             present_completion.wait_nonzero();
         }

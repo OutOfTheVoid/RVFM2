@@ -1,5 +1,5 @@
 use alloc::{sync::Arc, vec::Vec};
-use rvfm_platform::{command_list::CommandListCompletion, gpu::{gpu_submit, GpuCommandBuilderExt, ShaderKind, VideoResolution}, multihart::spinlock::SpinLock};
+use rvfm_platform::{__println__, command_list::CommandListCompletion, gpu::{gpu_submit, GpuCommandBuilderExt, ShaderKind, VideoResolution}, multihart::spinlock::SpinLock};
 use core::sync::atomic::{self, AtomicUsize};
 pub use rvfm_platform::gpu::TextureConfig;
 
@@ -118,7 +118,7 @@ impl Instance {
 
     pub fn flush_transfer_queue(&self, operation_fence: bool) -> Option<FenceWait> {
         let mut queue = self.0.transfer_queue.lock();
-        let finished_sid = queue.barrier();
+        let finished_sid = if operation_fence { queue.barrier() } else { 0 };
         let mut transfer_completion = queue.submit();
         transfer_completion.wait();
         if operation_fence {
@@ -169,15 +169,22 @@ impl Instance {
             let transfer_queue = self.0.transfer_queue.lock();
             transfer_queue.transfer_completion().read()
         };
-        if dependency_sid >= transfer_sid as usize {
+        if dependency_sid > transfer_sid as usize {
             self.flush_transfer_queue(false);
         }
-        let mut submission_completion = command_buffer.submission_completion.take().map(|completion| {
-            completion.wait_nonzero();
-            completion
+        let mut submission_completion = command_buffer.submission_completion.take().map(|old_completion| {
+            old_completion.wait_nonzero();
+            old_completion
         }).unwrap_or_else(|| CompletionInternal::new());
         gpu_submit(&mut command_buffer.list_internal, &mut submission_completion);
+        let run_sid = {
+            let mut transfer_queue = self.0.transfer_queue.lock();
+            transfer_queue.barrier()
+        };
         command_buffer.submission_completion = Some(submission_completion);
-        self.0.transfer_queue.lock().resolve_retained_writes();
+        command_buffer.run_fence = self.flush_transfer_queue(true);
+        let mut transfer_queue = self.0.transfer_queue.lock();
+        transfer_queue.resolve_retained_writes();
     }
 }
+

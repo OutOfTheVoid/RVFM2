@@ -32,3 +32,16 @@ static inline debug_result_t debug_print(const char * string) {
     debug_write_string(string);
     debug_flush();
 }
+
+static inline debug_result_t debug_print_u32_hex(u32 value) {
+    char string[8];
+    for (u32 i = 0; i < 8; i ++) {
+        u32 nibble = (value >> (28 - i * 4)) & 0x0F;
+        if (nibble <= 9) {
+            string[i] = '0' + nibble;
+        } else {
+            string[i] = 'A' + nibble - 10;
+        }
+    }
+    debug_write_message(string, 8);
+}

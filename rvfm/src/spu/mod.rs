@@ -6,6 +6,7 @@ mod command;
 mod filter;
 mod voice;
 mod pitch;
+mod lfo;
 
 use std::{borrow::BorrowMut, collections::VecDeque, sync::{atomic::{self, AtomicU32}, mpsc, Arc}, time::Duration};
 
@@ -15,7 +16,7 @@ use cpal::{traits::{DeviceTrait, HostTrait, StreamTrait}, FromSample, SampleForm
 use parking_lot::Mutex;
 use static_init::dynamic;
 
-use crate::{interrupt_controller::{InterruptType, INTERRUPT_CONTROLLER}, machine::{Machine, ReadResult, WriteResult}, pointer_queue::PointerQueue};
+use crate::{command_list, interrupt_controller::{InterruptType, INTERRUPT_CONTROLLER}, machine::{Machine, ReadResult, WriteResult}, pointer_queue::PointerQueue};
 
 use self::engine::Engine;
 
@@ -79,6 +80,7 @@ pub struct SpuStreamHandle {
 }
 
 pub fn spu_init(machine: &Arc<Machine>) -> Option<SpuStreamHandle> {
+    println!("spu_init");
     {
         let queue = SPU_QUEUE.lock().take_rx();
         let machine = machine.clone();
@@ -133,7 +135,8 @@ pub fn spu_init(machine: &Arc<Machine>) -> Option<SpuStreamHandle> {
                 return None;
             }
         };
-        let play_result = stream.play().expect("SPU: failed to start output stream");
+        println!("spu_init: playing stream");
+        stream.play().expect("SPU: failed to start output stream");
         Some(SpuStreamHandle {
             stream
         })
@@ -253,7 +256,11 @@ fn spu_render(regs: &SpuRegisters, machine: &Arc<Machine>, command_queues: &mut 
                     SpuCommand::Sampler { target, sampler_command } => {
                         engine.sampler_command(*target, *sampler_command);
                         true
-                    }
+                    },
+                    SpuCommand::Lfo { target, lfo_command } => {
+                        engine.lfo_command(*target, *lfo_command);
+                        true
+                    },
                 };
                 if pop {
                     println!("SPU: {:?}", command);
@@ -276,13 +283,16 @@ fn spu_command_thread(queue: mpsc::Receiver<(u32, u32)>, machine: Arc<Machine>) 
     loop {
         match queue.recv() {
             Ok((queue_index, command_list_address)) => {
+                println!("SPU Queue {} Receive: {:010X}", queue_index, command_list_address);
                 parse_command_list(command_list_address, &machine, &mut commands);
+                println!("parsed command list length: {}", commands.len());
                 let mut staging_queue = STAGING_COMMAND_QUEUE.lock();
                 for command in commands.drain(..).into_iter() {
                     staging_queue.push_back((queue_index, command));
                 }
             },
             Err(_) => {
+                println!("SPU Queue Error");
                 return
             },
         }
@@ -307,6 +317,7 @@ fn parse_command_list(address: u32, machine: &Arc<Machine>, commands: &mut Vec<S
             return;
         }
     };
+    println!("spu command list len: {}", command_list.len());
     let mut offset = 0;
     while let Some((offset_next, command)) = SpuCommand::read(&command_list, offset) {
         offset = offset_next;

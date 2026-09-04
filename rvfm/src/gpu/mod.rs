@@ -76,6 +76,7 @@ fn gpu_thread(queue: Receiver<(u32, u32)>, machine: Arc<Machine>, main_window: M
 pub fn gpu_write_u32(offset: u32, value: u32) -> WriteResult {
     match offset {
         0 => {
+            println!("Gpu queue write: {:08X}", value);
             GPU_QUEUE_LOCAL.with(|queue| {
                 queue.send((0, value)).unwrap();
             });
